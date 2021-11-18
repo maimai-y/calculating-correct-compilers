@@ -49,7 +49,7 @@ Expr2 = Abs (Var zero)
 -- (λx. x) 3
 Expr3 : Expr (Num 3) []
 Expr3 = App (Abs (Var zero)) (Val 3)
--- x
+-- y
 Expr4 : Expr (Num 2) (Num 0 ∷ Num 2 ∷ [])
 Expr4 = Var (suc zero)
 
@@ -96,6 +96,7 @@ data Code where
   PUSH : (n : ℕ) → Code ((VAL (Num n)) ∷ S) S' E E' → Code S S' E E'
   ADD : Code ((VAL (Num p)) ∷ S) S' E E' → Code ((VAL (Num m)) ∷ (VAL (Num n)) ∷ S) S' E E'
   LOOKUP : var α E → Code ((VAL α) ∷ S) S' E E' → Code S S' E E'
+  --ABS : 
 
 comp : Expr α E → Code (VAL α ∷ S) S' E E' → Code S S' E E'
 
@@ -152,21 +153,14 @@ correct (Var v) c s ev =
   ≡⟨ refl ⟩
     exec c ⟨ eval (Var v) ev ▷ s , ev ⟩
   ∎
--- correct {Num n} (Var zero) c s (env (Num n ∷ _)) =
---   begin
---     exec (comp (Var zero) c) ⟨ s , env (Num n ∷ _) ⟩
---   ≡⟨ {!!} ⟩
---     exec c ⟨ n ▷ s , env (Num n ∷ _) ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ eval (Var zero) (env (Num n ∷ _)) ▷ s , env (Num n ∷ _) ⟩
---   ∎
--- correct {Clo ex en} (Var zero) c s (env (Clo ex en ∷ _)) = {!!}
--- correct (Var (suc v)) c s (env (fst ∷ rest)) = {!!}
--- correct (Var v) c s (env rest) 
---   begin
---     exec (comp (Var v) c) ⟨ s , ev ⟩
---   ≡⟨ {!!} ⟩
---     exec c ⟨ eval (Var v) ev ▷ s , ev ⟩
---   ∎
-correct (Abs e) c s ev = {!!}
+correct (Abs e) c s (env lst) =
+  begin
+    exec (comp (Abs e) c) ⟨ s , (env lst) ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec (ABS e c) ⟨ s , (env lst) ⟩
+  ≡⟨ {!!} ⟩
+    exec c ⟨ fun e lst ▷ s , (env lst) ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ eval (Abs e) (env lst) ▷ s , (env lst) ⟩
+  ∎
 correct (App e e₁) c s ev = {!!}
