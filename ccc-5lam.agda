@@ -60,13 +60,19 @@ El : Value → Set
 El (Num n) = ℕ
 El (Clo exp E) = Fun
 
+lookup : var α E → Env E → El α
+lookup {Num n} zero (env (Num n ∷ _)) = n
+lookup {Clo ex ev} zero (env (Clo ex ev ∷ _)) = fun ex ev
+lookup (suc v) (env (_ ∷ rest)) = lookup v (env rest)
+
 eval : (Expr α E) → Env E → El α
 eval (Val n) e = n
 eval (Add x y) e with (eval x e) | (eval y e)
 ... | n | m = n + m
-eval {Num n} (Var zero) (env .(Num n ∷ _)) = n
-eval {Clo ex en} (Var zero) (env .(Clo ex en ∷ _)) = fun ex en
-eval (Var (suc v)) (env (x ∷ l)) = eval (Var v) (env l)
+eval (Var v) e = lookup v e
+-- eval {Num n} (Var zero) (env (Num n ∷ _)) = n
+-- eval {Clo ex en} (Var zero) (env (Clo ex en ∷ _)) = fun ex en
+-- eval (Var (suc v)) (env (x ∷ l)) = eval (Var v) (env l)
 eval (Abs exp) (env lst) = fun exp lst
 eval (App {α₁ = Num n} x y) (env lst) = n
 eval (App {α₁ = Clo ex en} x y) (env lst) = fun ex en
@@ -76,7 +82,6 @@ data Code : List Elem → List Elem → List Value → List Value → Set
   
 variable
   S S' S'' : List Elem
-  el : Elem
 
 data Elem where
   VAL : Value → Elem
@@ -88,20 +93,22 @@ data Stack : List Elem → Set where
 infixr 40 _▷_
 
 data Code where
-  PUSH : (n : ℕ) → Code ((VAL (Num n)) ∷ S) S' E E'' → Code S S' E E''
-  ADD : Code ((VAL (Num p)) ∷ S) S' E E'' → Code ((VAL (Num m)) ∷ (VAL (Num n)) ∷ S) S' E E''
+  PUSH : (n : ℕ) → Code ((VAL (Num n)) ∷ S) S' E E' → Code S S' E E'
+  ADD : Code ((VAL (Num p)) ∷ S) S' E E' → Code ((VAL (Num m)) ∷ (VAL (Num n)) ∷ S) S' E E'
+  LOOKUP : var α E → Code ((VAL α) ∷ S) S' E E' → Code S S' E E'
 
 comp : Expr α E → Code (VAL α ∷ S) S' E E' → Code S S' E E'
 
 comp (Val n) c = PUSH n c
 comp (Add x y) c = (comp x (comp y (ADD c)))
-comp (Var v) c = {!!}
+comp (Var v) c = LOOKUP v c
 comp (Abs e) c = {!!}
 comp (App e e₁) c = {!!}
 
 exec : Code S S' E E' → Stack S × Env E → Stack S' × Env E'
-exec (PUSH n c) ⟨ s , ev' ⟩ = exec c ⟨ n ▷ s , ev' ⟩
-exec (ADD c) ⟨ m ▷ n ▷ s , ev' ⟩ = exec c ⟨ (n + m) ▷ s , ev' ⟩
+exec (PUSH n c) ⟨ s , ev ⟩ = exec c ⟨ n ▷ s , ev ⟩
+exec (ADD c) ⟨ m ▷ n ▷ s , ev ⟩ = exec c ⟨ (n + m) ▷ s , ev ⟩
+exec (LOOKUP v c) ⟨ s , ev ⟩ = exec c ⟨ (lookup v ev) ▷ s , ev ⟩
 
 correct :
   (e : Expr α E)
@@ -135,6 +142,31 @@ correct (Add x y) c s ev =
   ≡⟨ refl ⟩
     exec c ⟨ eval (Add x y) ev ▷ s , ev ⟩
   ∎
-correct (Var v) c s ev = {!!}
+correct (Var v) c s ev =
+  begin
+    exec (comp (Var v) c) ⟨ s , ev ⟩
+  ≡⟨ refl ⟩
+    exec (LOOKUP v c) ⟨ s , ev ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ lookup v ev ▷ s , ev ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ eval (Var v) ev ▷ s , ev ⟩
+  ∎
+-- correct {Num n} (Var zero) c s (env (Num n ∷ _)) =
+--   begin
+--     exec (comp (Var zero) c) ⟨ s , env (Num n ∷ _) ⟩
+--   ≡⟨ {!!} ⟩
+--     exec c ⟨ n ▷ s , env (Num n ∷ _) ⟩
+--   ≡⟨ refl ⟩
+--     exec c ⟨ eval (Var zero) (env (Num n ∷ _)) ▷ s , env (Num n ∷ _) ⟩
+--   ∎
+-- correct {Clo ex en} (Var zero) c s (env (Clo ex en ∷ _)) = {!!}
+-- correct (Var (suc v)) c s (env (fst ∷ rest)) = {!!}
+-- correct (Var v) c s (env rest) 
+--   begin
+--     exec (comp (Var v) c) ⟨ s , ev ⟩
+--   ≡⟨ {!!} ⟩
+--     exec c ⟨ eval (Var v) ev ▷ s , ev ⟩
+--   ∎
 correct (Abs e) c s ev = {!!}
 correct (App e e₁) c s ev = {!!}
