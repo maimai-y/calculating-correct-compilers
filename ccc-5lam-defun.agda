@@ -61,11 +61,11 @@ eval (App e₁ e₂) env = (eval e₁ env) (eval e₂ env)
   
 data STy : Set where
   typ : (α : Ty) → STy
-  -- clo : STy
+  clo-ty : (α₂ : Ty) → (α₁ : Ty) → STy
 
 El-STy : STy → Set
 El-STy (typ α) = El α
--- El-STy clo = {!!}
+El-STy (clo-ty α₂ α₁) = {!!}
 
 variable
   S S' S'' : List STy

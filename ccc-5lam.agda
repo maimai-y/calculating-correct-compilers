@@ -200,15 +200,18 @@ Expr2 = Abs (Var zero)
 -- (λx. x) 3
 Expr3 : Expr nat []
 Expr3 = App (Abs (Var zero)) (Val 3)
--- y
+-- x
 Expr4 : Expr α (σ ∷ α ∷ E)
 Expr4 = Var (suc zero)
 -- (λx. x + 2) 3
 Expr5 : Expr nat []
 Expr5 = App (Abs (Add (Var zero) (Val 2))) (Val 3)
--- (λxy. x + y) 3 5
+-- (λxy. y + x) 3 5
 Expr6 : Expr nat []
 Expr6 = App (App (Abs (Abs (Add (Var zero) (Var (suc zero))))) (Val 3)) (Val 5)
+-- (λxy. y + x 1) (λx. x + 1) 3
+Expr7 : Expr nat []
+Expr7 = App (App (Abs (Abs (Add (Var zero) (App (Var (suc zero)) (Val 1))))) (Abs (Add (Var zero) (Val 1)))) (Val 3)
 
 test3 : exec (compile Expr3) ⟨ ϵ , nil ⟩ ≡ ⟨ 3 ▷ ϵ , nil ⟩
 test3 = refl
@@ -218,5 +221,8 @@ test5 = refl
 
 test6 : exec (compile Expr6) ⟨ ϵ , nil ⟩ ≡ ⟨ 8 ▷ ϵ , nil ⟩
 test6 = refl
+
+test7 : exec (compile Expr7) ⟨ ϵ , nil ⟩ ≡ ⟨ 5 ▷ ϵ , nil ⟩
+test7 = refl
 
 
