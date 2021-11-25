@@ -54,7 +54,7 @@ data Env where
 
 data Value where
   Num : (n : ℕ) → Value nat
-  Clo : (exp : Expr (α₂ ⇒ α₁) E) → (env : Env E) → Value (α₂ ⇒ α₁)
+  Clo : (exp : Expr α₁ (α₂ ∷ E)) → (env : Env E) → Value (α₂ ⇒ α₁)
 
 -- variables
 data var : (α : Ty) (E : List Ty) → Set where
