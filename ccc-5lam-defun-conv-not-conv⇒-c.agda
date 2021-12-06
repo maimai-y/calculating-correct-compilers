@@ -65,7 +65,13 @@ data Ty-c : Set
 
 data Ty-c where
   nat-c : Ty-c
-  ⇒-c : Ty-c → Ty-c → List STy → List STy → List Ty-c → List Ty-c → Ty-c
+  ⇒-c :
+    Ty-c → Ty-c →
+    List STy → -- 最初のstack　型がどうなっているstackの上にα₁が置かれるか　関数適用する前のstack
+    List STy → -- 最後のstack　最後まで継続の仕事を終わらせたらstackはどうなるか
+    List Ty-c → -- 最初の環境
+    List Ty-c → -- 最後の環境
+    Ty-c
 
 data STy where
   typ : Ty-c → STy
@@ -78,30 +84,35 @@ variable
   E-c E'-c E-lam-c : List Ty-c
   S S' : List STy
 
+{-# TERMINATING #-}
 conv-ty : {S S' : List STy} {E-c E'-c : List Ty-c} → Ty → Ty-c
 conv-ty nat = nat-c
 conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (α₂ ⇒ α₁) =
   ⇒-c
   (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} α₂)
-  (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} α₁)
+  (conv-ty {S = typ (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} α₂) ∷
+                typ (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (α₂ ⇒ α₁)) ∷
+                S}
+           {S' = S'}
+           {E-c = E-c}
+           {E'-c = E'-c}
+           α₁)
   S S' E-c E'-c
 
 conv-ty-lst : List Ty → List Ty-c
+conv-ty-lst [] = []
+conv-ty-lst (fst ∷ rst) = conv-ty fst ∷ conv-ty-lst rst
 
--- variables
-data var-c : (α-c : Ty-c) (E-c : List Ty-c) → Set where
-  zero-c : var-c α-c (α-c ∷ E-c)
-  suc-c  : (x : var-c α-c E-c) → var-c α-c (σ-c ∷ E-c)
-
-conv-var : var α E → var-c α-c E-c
-conv-var zero = {!zero-c!}
-conv-var (suc v) = {!!}
 data Env-c : List Ty-c → Set
-conv-env : Env E → Env-c E-c
+conv-env : Env E → Env-c (conv-ty-lst E)
 data Code : List STy → List STy → List Ty-c → List Ty-c → Set
-comp : Expr α E →
-       Code (typ (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} α) ∷ S) S' E-c E'-c →
-       Code S S' E-c E'-c
+comp : {S S' : List STy} {E E' : List Ty} →
+       Expr α E →
+       Code (typ (conv-ty {S = S} {S' = S'} {E-c = conv-ty-lst E} {E'-c = conv-ty-lst E'} α) ∷ S)
+            S'
+            (conv-ty-lst E)
+            (conv-ty-lst E') →
+       Code S S' (conv-ty-lst E) (conv-ty-lst E')
 
 data Value-c : Ty-c → Set where
   Num-c : (n : ℕ) → Value-c nat-c
@@ -111,41 +122,46 @@ data Value-c : Ty-c → Set where
           → Value-c (⇒-c α₂-c α₁-c S S' E-c E'-c)
 
 data Code where
---   PUSH : (n : ℕ) → Code (typ-c nat-c ∷ S-c) S'-c E-c E'-c → Code S-c S'-c E-c E'-c
---   ADD : Code (typ-c nat-c ∷ S-c) S'-c E-c E'-c → Code (typ-c nat-c ∷ typ-c nat-c ∷ S-c) S'-c E-c E'-c
---   LOOKUP : var-c α-c E-c → Code (typ-c α-c ∷ S-c) S'-c E-c E'-c → Code S-c S'-c E-c E'-c
---   ABS : Expr α₁ (α₂ ∷ E) → Code (typ-c (⇒-c α₂-c α₁-c　S-c S'-c E-c E'-c) ∷ S-c) S'-c E-c E'-c
---         → Code S-c S'-c E-c E'-c
+  PUSH : (n : ℕ) → Code (typ nat-c ∷ S) S' E-c E'-c → Code S S' E-c E'-c
+  ADD : Code (typ nat-c ∷ S) S' E-c E'-c → Code (typ nat-c ∷ typ nat-c ∷ S) S' E-c E'-c
+  LOOKUP : var α E → Code (typ (conv-ty α) ∷ S) S' (conv-ty-lst E) E'-c → Code S S' (conv-ty-lst E) E'-c
+  ABS : Expr α₁ (α₂ ∷ E) →
+        Code (typ (⇒-c (conv-ty α₂) (conv-ty α₁)　S S' (conv-ty-lst E) (conv-ty-lst E')) ∷ S)
+             S'
+             (conv-ty-lst E)
+             (conv-ty-lst E')
+        → Code S S' (conv-ty-lst E) (conv-ty-lst E')
   RET : Code
         (typ (conv-ty α₁) ∷ clo-ty (typ (conv-ty α₁) ∷ S) S' E-c E'-c ∷ S)
         S'
         ((conv-ty α₂) ∷ E-lam-c)
         E'-c
---   APP : Code (typ-c α₁-c ∷ S-c) S'-c E-c E'-c
---         → Code (typ-c α₂-c ∷ typ-c (⇒-c α₂-c α₁-c S-c S'-c E-c E'-c) ∷ S-c) S'-c E-c E'-c
+  APP : Code (typ α₁-c ∷ S) S' E-c E'-c
+        → Code (typ α₂-c ∷ typ (⇒-c α₂-c α₁-c S S' E-c E'-c) ∷ S) S' E-c E'-c
 --   HALT : Code S-c S-c E-c E-c
 
-conv : {S S' : List STy} {E-c E'-c : List Ty-c} →
+conv : {S S' : List STy} {E E' : List Ty} →
        Value α →
-       Value-c (conv-ty {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} α)
+       Value-c (conv-ty {S = S} {S' = S'} {E-c = conv-ty-lst E} {E'-c = conv-ty-lst E'} α)
 conv (Num n) = Num-c n
-conv {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (Clo {α₁ = α₁} {α₂ = α₂} {E-lam = E-lam} exp env)
-  = Clo-c {α₁-c = conv-ty α₁} {α₂-c = conv-ty α₂} {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (comp exp RET) (conv-env env)
+conv {S = S} {S' = S'} {E = E} {E' = E'} (Clo {α₁ = α₁} {α₂ = α₂} {E-lam = E-lam} exp env)
+  = Clo-c
+    {α₁-c = conv-ty α₁} {α₂-c = conv-ty α₂}
+    {E-lam-c = conv-ty-lst E-lam}
+    {S = S} {S' = S'} {E-c = conv-ty-lst E} {E'-c = conv-ty-lst E'}
+    (comp {S = clo-ty (typ (conv-ty α₁) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') ∷ S}
+          {S' = S'}
+          {E = α₂ ∷ E-lam}
+          {E' = E'}
+          exp RET)
+    (conv-env env)
 
---{E-lam-c = conv-ty-lst E-lam} 
--- exp : Expr α₁ (α₂ ∷ E-lam)
--- env : Env E-lam
--- RET : Code (typ α₁ ∷ clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E'
--- comp : Expr α E → Code (typ α ∷ S) S' E E' → Code S S' E E'
--- now ... comp : Expr α₁ (α₂ ∷ E-lam) → Code (typ α₁ ∷ clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E'
---                  → Code (clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E'
--- Clo : (exp : Expr α₁ (α₂ ∷ E-lam)) → (env : Env E-lam) → Value (α₂ ⇒ α₁)
-
--- data Env-c where
---   nil-c : Env-c []
---   cons-c : Value-c α → Env-c E → Env-c (α ∷ E)
--- conv-env nil = nil-c
--- conv-env (cons v env) = cons-c (conv v) (conv-env env)
+data Env-c where
+  nil-c : Env-c []
+  cons-c : Value-c α-c → Env-c E-c → Env-c (α-c ∷ E-c)
+  
+conv-env nil = nil-c
+conv-env (cons v env) = cons-c (conv v) (conv-env env)
 
 -- ValueのStack版のような感じ Elem-cの意味でElem
 data Elem : STy → Set where
@@ -157,149 +173,140 @@ data Stack : List STy → Set where
   _▷_ : Elem β → Stack S → Stack (β ∷ S)
 infixr 40 _▷_
 
--- comp (Val n) c = PUSH n c
--- comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
--- comp (Var v) c = LOOKUP v c
--- comp (Abs e) c = ABS e c
+comp (Val n) c = PUSH n c
+comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
+comp (Var v) c = LOOKUP v c
+--comp (Abs e) c = ABS e c -- ここのコメントを外すと型チェックが終わらない
 -- comp (App e₁ e₂) c = comp e₁ (comp e₂ (APP c))
 
--- lookup-c : var α E → Env-c E → Value-c α
--- lookup-c zero (cons-c x env) = x
--- lookup-c (suc v) (cons-c x env) = lookup-c v env
+lookup-c : var α E → Env-c (conv-ty-lst E) → Value-c (conv-ty α)
+lookup-c zero (cons-c fst rest) = fst
+lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
--- {-# TERMINATING #-}
+{-# TERMINATING #-}
 exec : Code S S' E-c E'-c → Stack S × Env-c E-c → Stack S' × Env-c E'-c
--- exec (PUSH n c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Num-c n) ▷ s , env-c ⟩
--- exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (Num-c n) ▷ s , env-c ⟩ =
---   exec c ⟨ VAL (Num-c (n + m)) ▷ s , env-c ⟩
--- exec (LOOKUP v c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (lookup-c v env-c) ▷ s , env-c ⟩
--- exec (ABS e c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Clo-c (comp e RET) env-c) ▷ s , env-c ⟩
--- exec RET ⟨ VAL v₁-c ▷ CLO c env-c ▷ s , _ ⟩ = exec c ⟨ VAL v₁-c ▷ s , env-c ⟩
--- -- exec (APP c) ⟨ (VAL v₂-c) ▷ ((VAL (conv (Clo e-lam env-lam))) ▷ s) , env-c ⟩ with =
---   --   exec (comp e-lam RET) ⟨ CLO c env-c ▷ s , cons-c v₂-c (conv-env env-lam) ⟩
--- -- exec (APP {S = S} {S' = S'} {E = E} {E' = E'} c) ⟨ (VAL v₂-c) ▷ VAL (Clo-c {S = S} {S' = S'} {E = E} {E' = E'} code-lam env-lam) ▷ s , env-c ⟩
--- --   = exec code-lam ⟨ CLO {S = S} {S' = S'} {E = E} {E' = E'} c env-c ▷ s , cons-c v₂-c env-lam ⟩
--- exec (APP c) ⟨ (VAL v₂-c) ▷ VAL (Clo-c code-lam env-lam) ▷ s , env-c ⟩
---   = {!exec code-lam ⟨ ? , ? ⟩!}
---   --exec code-lam ⟨ CLO c env-c ▷ s , cons-c v₂-c env-lam ⟩
+exec (PUSH n c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Num-c n) ▷ s , env-c ⟩
+exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (Num-c n) ▷ s , env-c ⟩ =
+  exec c ⟨ VAL (Num-c (n + m)) ▷ s , env-c ⟩
+exec (LOOKUP v-c c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (lookup-c v-c env-c) ▷ s , env-c ⟩
+exec (ABS e c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Clo-c (comp e RET) env-c) ▷ s , env-c ⟩
+exec RET ⟨ VAL v₁-c ▷ CLO c env-c ▷ s , _ ⟩ = exec c ⟨ VAL v₁-c ▷ s , env-c ⟩
+exec (APP c) ⟨ (VAL v₂-c) ▷ VAL (Clo-c code-lam env-lam) ▷ s , env-c ⟩
+  = exec code-lam ⟨ CLO c env-c ▷ s , cons-c v₂-c env-lam ⟩
 -- exec HALT ⟨ s , env-c ⟩ = ⟨ s , env-c ⟩
 
--- -- APP : Code (typ α₁ ∷ S) S' E E' → Code (typ α₂ ∷ typ (α₂ ⇒ α₁) ∷ S) S' E E'
--- -- CLO : Code (typ α₁ ∷ S) S' E E' → Env-c E → Elem (clo-ty (typ α₁ ∷ S) S' E E')
--- -- Clo-c : (code : Code (clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E') → (env : Env-c E-lam) → Value-c (α₂ ⇒ α₁)
+lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
+lemma-order-exchange zero (cons x env) = refl
+lemma-order-exchange (suc v) (cons x env) =
+  begin
+    lookup-c (suc v) (conv-env (cons x env))
+  ≡⟨ refl ⟩
+    lookup-c (suc v) (cons-c (conv x) (conv-env env))
+  ≡⟨ refl ⟩
+    lookup-c v (conv-env env)
+  ≡⟨ lemma-order-exchange v env ⟩
+    conv (lookup v env)
+  ≡⟨ refl ⟩
+    conv (lookup (suc v) (cons x env))
+  ∎
 
--- lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
--- lemma-order-exchange zero (cons x env) = refl
--- lemma-order-exchange (suc v) (cons x env) =
---   begin
---     lookup-c (suc v) (conv-env (cons x env))
---   ≡⟨ refl ⟩
---     lookup-c (suc v) (cons-c (conv x) (conv-env env))
---   ≡⟨ refl ⟩
---     lookup-c v (conv-env env)
---   ≡⟨ lemma-order-exchange v env ⟩
---     conv (lookup v env)
---   ≡⟨ refl ⟩
---     conv (lookup (suc v) (cons x env))
---   ∎
+{-# TERMINATING #-}
+correct :
+  (e : Expr α E)
+  (c : Code (typ (conv-ty α) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E'))
+  (s : Stack S)
+  (env : Env E)
+  →
+  exec (comp e c) ⟨ s , conv-env env ⟩ ≡ exec c ⟨ VAL (conv (eval e env)) ▷ s , conv-env env ⟩
 
--- {-# TERMINATING #-}
--- correct :
---   (e : Expr α E)
---   (c : Code (typ (conv-ty α) ∷ S) S' E E)
---   (s : Stack S)
---   (env : Env E)
---   →
---   exec (comp e c) ⟨ s , conv-env env ⟩ ≡ exec c ⟨ VAL (conv (eval e env)) ▷ s , conv-env env ⟩
+correct (Val n) c s env =
+  begin
+    exec (comp (Val n) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (PUSH n c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (Num-c n) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (conv (Num n)) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (conv (eval (Val n) env)) ▷ s , conv-env env ⟩
+  ∎
 
--- correct (Val n) c s env =
---   begin
---     exec (comp (Val n) c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec (PUSH n c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (Num-c n) ▷ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (conv (Num n)) ▷ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (conv (eval (Val n) env)) ▷ s , conv-env env ⟩
---   ∎
+correct (Add e₁ e₂) c s env with eval e₁ env | eval e₂ env | inspect (eval e₁) env | inspect (eval e₂) env
+... | Num n | Num m | [ eq₁ ] | [ eq₂ ] =
+  begin
+    exec (comp (Add e₁ e₂) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (comp e₁ (comp e₂ (ADD c))) ⟨ s , conv-env env ⟩
+  ≡⟨ correct e₁ (comp e₂ (ADD c)) s env ⟩
+    exec (comp e₂ (ADD c)) ⟨ (VAL (conv (eval e₁ env)) ▷ s) , conv-env env ⟩
+  ≡⟨ correct e₂ (ADD c) (VAL (conv (eval e₁ env)) ▷ s) env ⟩
+    exec (ADD c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
+  ≡⟨ cong (λ v → exec (ADD c) ⟨ VAL (conv v) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩) eq₂ ⟩
+    exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
+  ≡⟨ cong (λ v → exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (conv v) ▷ s , conv-env env ⟩) eq₁ ⟩
+    exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (Num-c n) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (Num-c (n + m)) ▷ s , conv-env env ⟩
+  -- ≡⟨ refl ⟩
+  --   exec c ⟨ VAL (conv (eval (Add e₁ e₂) env)) ▷ s , conv-env env ⟩
+  ∎
 
--- correct (Add e₁ e₂) c s env with eval e₁ env | eval e₂ env | inspect (eval e₁) env | inspect (eval e₂) env
--- ... | Num n | Num m | [ eq₁ ] | [ eq₂ ] =
---   begin
---     exec (comp (Add e₁ e₂) c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec (comp e₁ (comp e₂ (ADD c))) ⟨ s , conv-env env ⟩
---   ≡⟨ correct e₁ (comp e₂ (ADD c)) s env ⟩
---     exec (comp e₂ (ADD c)) ⟨ (VAL (conv (eval e₁ env)) ▷ s) , conv-env env ⟩
---   ≡⟨ correct e₂ (ADD c) (VAL (conv (eval e₁ env)) ▷ s) env ⟩
---     exec (ADD c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
---   ≡⟨ cong (λ v → exec (ADD c) ⟨ VAL (conv v) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩) eq₂ ⟩
---     exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
---   ≡⟨ cong (λ v → exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (conv v) ▷ s , conv-env env ⟩) eq₁ ⟩
---     exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (Num-c n) ▷ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (Num-c (n + m)) ▷ s , conv-env env ⟩
---   -- ≡⟨ refl ⟩
---   --   exec c ⟨ VAL (conv (eval (Add e₁ e₂) env)) ▷ s , conv-env env ⟩
---   ∎
+correct (Var v) c s env =
+  begin
+    exec (comp (Var v) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (LOOKUP v c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (lookup-c v (conv-env env)) ▷ s , conv-env env ⟩
+  ≡⟨ cong (λ v → exec c ⟨ VAL v ▷ s , conv-env env ⟩) (lemma-order-exchange v env) ⟩
+    exec c ⟨ VAL (conv (lookup v env)) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (conv (eval (Var v) env)) ▷ s , conv-env env ⟩
+  ∎
 
--- correct (Var v) c s env =
---   begin
---     exec (comp (Var v) c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec (LOOKUP v c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (lookup-c v (conv-env env)) ▷ s , conv-env env ⟩
---   ≡⟨ cong (λ v → exec c ⟨ VAL v ▷ s , conv-env env ⟩) (lemma-order-exchange v env) ⟩
---     exec c ⟨ VAL (conv (lookup v env)) ▷ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (conv (eval (Var v) env)) ▷ s , conv-env env ⟩
---   ∎
+correct (Abs e) c s env =
+  begin
+    exec (comp (Abs e) c) ⟨ s , conv-env env ⟩
+  ≡⟨ {!!} ⟩
+    exec (ABS e c) ⟨ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec c ⟨ VAL (Clo-c (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec c ⟨ VAL (conv (Clo e env)) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ VAL (conv (eval (Abs e) env)) ▷ s , conv-env env ⟩
+  ∎
 
--- correct (Abs e) c s env =
---   begin
---     exec (comp (Abs e) c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec (ABS e c) ⟨ s , conv-env env ⟩
---   -- ≡⟨ {!!} ⟩
---   --   exec c ⟨ VAL (Clo-c (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
---   -- ≡⟨ {!!} ⟩
---   --   exec c ⟨ VAL (conv (Clo e env)) ▷ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (conv (eval (Abs e) env)) ▷ s , conv-env env ⟩
---   ∎
-
--- correct (App e₁ e₂) c s env with eval e₁ env       | inspect (eval e₁) env
--- correct (App e₁ e₂) c s env    | Clo e-lam env-lam | [ eq ] =
---   begin
---     exec (comp (App e₁ e₂) c) ⟨ s , conv-env env ⟩
---   ≡⟨ refl ⟩
---     exec (comp e₁ (comp e₂ (APP c))) ⟨ s , conv-env env ⟩
---   ≡⟨ correct e₁ (comp e₂ (APP c)) s env ⟩
---     exec (comp e₂ (APP c)) ⟨ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
---   ≡⟨ correct e₂ (APP c) (VAL (conv (eval e₁ env)) ▷ s) env ⟩
---     exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
---   ≡⟨ cong (λ v₁ → exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv v₁) ▷ s , conv-env env ⟩) eq ⟩
---     exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (Clo e-lam env-lam)) ▷ s , conv-env env ⟩
---   ≡⟨ {!!} ⟩
---     exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (Clo-c (comp e-lam RET) (conv-env env-lam)) ▷ s , conv-env env ⟩
---   ≡⟨ {!!} ⟩
---     exec (comp e-lam RET) ⟨ CLO c (conv-env env) ▷ s , cons-c (conv (eval e₂ env)) (conv-env env-lam) ⟩
---   ≡⟨ refl ⟩
---     exec (comp e-lam RET) ⟨ CLO c (conv-env env) ▷ s , conv-env (cons (eval e₂ env) env-lam) ⟩
---   ≡⟨ correct e-lam RET (CLO c (conv-env env) ▷ s) (cons (eval e₂ env) env-lam) ⟩
---     exec RET ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ CLO c (conv-env env) ▷ s ,
---                conv-env (cons (eval e₂ env) env-lam) ⟩
---   ≡⟨ refl ⟩
---     exec RET ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ CLO c (conv-env env) ▷ s ,
---                cons-c (conv (eval e₂ env)) (conv-env env-lam) ⟩
---   ≡⟨ refl ⟩
---     exec c ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ s , conv-env env ⟩
---   -- ≡⟨ {!!} ⟩
---   --   exec c ⟨ VAL (conv (eval (App e₁ e₂) env)) ▷ s , conv-env env ⟩
---   ∎
+correct (App e₁ e₂) c s env with eval e₁ env       | inspect (eval e₁) env
+correct (App e₁ e₂) c s env    | Clo e-lam env-lam | [ eq ] =
+  begin
+    exec (comp (App e₁ e₂) c) ⟨ s , conv-env env ⟩
+  ≡⟨ {!!} ⟩
+  --   exec (comp e₁ (comp e₂ (APP c))) ⟨ s , conv-env env ⟩
+  -- ≡⟨ correct e₁ (comp e₂ (APP c)) s env ⟩
+  --   exec (comp e₂ (APP c)) ⟨ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
+  -- ≡⟨ correct e₂ (APP c) (VAL (conv (eval e₁ env)) ▷ s) env ⟩
+  --   exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (eval e₁ env)) ▷ s , conv-env env ⟩
+  -- ≡⟨ cong (λ v₁ → exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv v₁) ▷ s , conv-env env ⟩) eq ⟩
+  --   exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (conv (Clo e-lam env-lam)) ▷ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec (APP c) ⟨ VAL (conv (eval e₂ env)) ▷ VAL (Clo-c (comp e-lam RET) (conv-env env-lam)) ▷ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec (comp e-lam RET) ⟨ CLO c (conv-env env) ▷ s , cons-c (conv (eval e₂ env)) (conv-env env-lam) ⟩
+  -- ≡⟨ refl ⟩
+  --   exec (comp e-lam RET) ⟨ CLO c (conv-env env) ▷ s , conv-env (cons (eval e₂ env) env-lam) ⟩
+  -- ≡⟨ correct e-lam RET (CLO c (conv-env env) ▷ s) (cons (eval e₂ env) env-lam) ⟩
+  --   exec RET ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ CLO c (conv-env env) ▷ s ,
+  --              conv-env (cons (eval e₂ env) env-lam) ⟩
+  -- ≡⟨ refl ⟩
+  --   exec RET ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ CLO c (conv-env env) ▷ s ,
+  --              cons-c (conv (eval e₂ env)) (conv-env env-lam) ⟩
+  -- ≡⟨ refl ⟩
+    exec c ⟨ VAL (conv (eval e-lam (cons (eval e₂ env) env-lam))) ▷ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec c ⟨ VAL (conv (eval (App e₁ e₂) env)) ▷ s , conv-env env ⟩
+  ∎
 
 -- compile : Expr α E → Code S (typ α ∷ S) E E
 -- compile e = comp e HALT
