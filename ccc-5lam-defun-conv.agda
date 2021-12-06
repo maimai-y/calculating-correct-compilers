@@ -82,11 +82,13 @@ comp : Expr α E → Code (typ α ∷ S) S' E E' → Code S S' E E'
 data Value-conv where
   Num-conv : (n : ℕ) → Value-conv nat
   -- Clo-conv : (code : Code (clo-ty ((typ α₁) ∷ _) _ _ _) _ (α₂ ∷ E-lam) _) → (env : Env-conv E-lam) → Value-conv (α₂ ⇒ α₁)
-  Clo-conv : (code : Code (clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E') → (env : Env-conv E-lam) → Value-conv (α₂ ⇒ α₁)
+  Clo-conv : (code : Code (clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E') →
+             (env : Env-conv E-lam) →
+             Value-conv (α₂ ⇒ α₁) -- ここにSS'EE'が無いのがhole1,2が埋まらない原因？
 
-conv : Value α → Value-conv α
+conv : {S S' : List STy} {E E' : List Ty} → Value α → Value-conv α
 conv (Num n) = Num-conv n
-conv (Clo exp env) = Clo-conv (comp exp RET) (conv-env env)
+conv {S = S} {S' = S'} {E = E} {E' = E'} (Clo exp env) = Clo-conv {S = S} {S' = S'} {E = E} {E' = E'} (comp exp RET) (conv-env env)
 -- exp : Expr α₁ (α₂ ∷ E-lam)
 -- env : Env E-lam
 -- RET : Code (typ α₁ ∷ clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E'
@@ -127,10 +129,9 @@ exec (ADD c) ⟨ VAL (Num-conv m) ▷ VAL (Num-conv n) ▷ s , env-conv ⟩ =
 exec (LOOKUP v c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (lookup-conv v env-conv) ▷ s , env-conv ⟩
 exec (ABS e c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (Clo-conv (comp e RET) env-conv) ▷ s , env-conv ⟩
 exec RET ⟨ VAL v₁-conv ▷ CLO c env-conv ▷ s , _ ⟩ = exec c ⟨ VAL v₁-conv ▷ s , env-conv ⟩
--- exec (APP c) ⟨ (VAL v₂-conv) ▷ ((VAL (conv (Clo e-lam env-lam))) ▷ s) , env-conv ⟩ with =
-  --   exec (comp e-lam RET) ⟨ CLO c env-conv ▷ s , cons-conv v₂-conv (conv-env env-lam) ⟩
-exec (APP c) ⟨ (VAL v₂-conv) ▷ VAL (Clo-conv code-lam env-lam) ▷ s , env-conv ⟩
- = exec code-lam ⟨ CLO c env-conv ▷ s , cons-conv v₂-conv env-lam ⟩
+exec (APP c) ⟨ (VAL v₂-conv) ▷ VAL (Clo-conv {S = S} {S' = S'} {E = E} {E' = E'} code-lam env-lam) ▷ s , env-conv ⟩
+ = exec {!code-lam!} {!!}
+ --exec code-lam ⟨ CLO c env-conv ▷ s , cons-conv v₂-conv env-lam ⟩
 exec HALT ⟨ s , env-conv ⟩ = ⟨ s , env-conv ⟩
 
 -- APP : Code (typ α₁ ∷ S) S' E E' → Code (typ α₂ ∷ typ (α₂ ⇒ α₁) ∷ S) S' E E'
