@@ -1,5 +1,5 @@
 
-module ccc-5lam-defun-conv-not-conv⇒-c where
+module ccc-5lam-defun-conv-⇒-c where
 
 open import Data.Nat
 open import Data.Bool using(Bool; if_then_else_; true; false)
@@ -75,6 +75,7 @@ data Ty-c where
 
 data STy where
   typ : Ty-c → STy
+  -- clo-ty S S' E E'は退避させた継続の型、環境の型がそれぞれCode S S' E E'、Env Eであったことを表す
   clo-ty : List STy → List STy → List Ty-c → List Ty-c → STy
 
 -- the following variables automatically become implicit arguments
@@ -126,12 +127,15 @@ data Code where
   PUSH : (n : ℕ) → Code (typ nat-c ∷ S) S' E-c E'-c → Code S S' E-c E'-c
   ADD : Code (typ nat-c ∷ S) S' E-c E'-c → Code (typ nat-c ∷ typ nat-c ∷ S) S' E-c E'-c
   LOOKUP : var α E → Code (typ (conv-ty α) ∷ S) S' (conv-ty-lst E) E'-c → Code S S' (conv-ty-lst E) E'-c
-  ABS : Expr α₁ (α₂ ∷ E) →
+  ABS : Code (clo-ty (typ (conv-ty α₁) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') ∷ S)
+             S'
+             (conv-ty-lst (α₂ ∷ E-lam))
+             (conv-ty-lst E') →
         Code (typ (⇒-c (conv-ty α₂) (conv-ty α₁)　S S' (conv-ty-lst E) (conv-ty-lst E')) ∷ S)
              S'
-             (conv-ty-lst E)
+             (conv-ty-lst E-lam)
              (conv-ty-lst E')
-        → Code S S' (conv-ty-lst E) (conv-ty-lst E')
+        → Code S S' (conv-ty-lst E-lam) (conv-ty-lst E')
   RET : Code
         (typ (conv-ty α₁) ∷ clo-ty (typ (conv-ty α₁) ∷ S) S' E-c E'-c ∷ S)
         S'
@@ -181,7 +185,7 @@ infixr 40 _▷_
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
 comp (Var v) c = LOOKUP v c
-comp (Abs e) c = ABS e c
+comp (Abs e) c = ABS (comp e RET) c
 comp (App e₁ e₂) c = comp e₁ (comp e₂ (APP c))
 
 lookup-c : var α E → Env-c (conv-ty-lst E) → Value-c (conv-ty α)
@@ -194,7 +198,7 @@ exec (PUSH n c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Num-c n) ▷ s , env-c ⟩
 exec (ADD c) ⟨ VAL (Num-c m) ▷ VAL (Num-c n) ▷ s , env-c ⟩ =
   exec c ⟨ VAL (Num-c (n + m)) ▷ s , env-c ⟩
 exec (LOOKUP v-c c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (lookup-c v-c env-c) ▷ s , env-c ⟩
-exec (ABS e c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Clo-c (comp e RET) env-c) ▷ s , env-c ⟩
+exec (ABS code c) ⟨ s , env-c ⟩ = exec c ⟨ VAL (Clo-c code env-c) ▷ s , env-c ⟩
 exec RET ⟨ VAL v₁-c ▷ CLO c env-c ▷ s , _ ⟩ = exec c ⟨ VAL v₁-c ▷ s , env-c ⟩
 exec (APP c) ⟨ (VAL v₂-c) ▷ VAL (Clo-c code-lam env-lam) ▷ s , env-c ⟩
   = exec code-lam ⟨ CLO c env-c ▷ s , cons-c v₂-c env-lam ⟩
@@ -274,7 +278,7 @@ correct (Abs e) c s env =
   begin
     exec (comp (Abs e) c) ⟨ s , conv-env env ⟩
   ≡⟨ refl ⟩
-    exec (ABS e c) ⟨ s , conv-env env ⟩
+    exec (ABS (comp e RET) c) ⟨ s , conv-env env ⟩
   -- ≡⟨ {!!} ⟩
   --   exec c ⟨ VAL (Clo-c (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
   -- ≡⟨ {!!} ⟩

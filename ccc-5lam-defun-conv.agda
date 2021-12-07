@@ -14,6 +14,7 @@ data Ty : Set where
 
 data STy : Set where
   typ : Ty → STy
+  -- clo-ty S S' E E'は退避させた継続の型、環境の型がそれぞれCode S S' E E'、Env Eであったことを表す
   clo-ty : List STy → List STy → List Ty → List Ty → STy
 
 -- the following variables automatically become implicit arguments
@@ -69,7 +70,9 @@ data Code where
   PUSH : (n : ℕ) → Code (typ nat ∷ S) S' E E' → Code S S' E E'
   ADD : Code (typ nat ∷ S) S' E E' → Code (typ nat ∷ typ nat ∷ S) S' E E'
   LOOKUP : var α E → Code (typ α ∷ S) S' E E' → Code S S' E E'
-  ABS : Expr α₁ (α₂ ∷ E) → Code (typ (α₂ ⇒ α₁) ∷ S) S' E E' → Code S S' E E'
+  ABS : Code (clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E' →
+        Code (typ (α₂ ⇒ α₁) ∷ S) S' E-lam E' →
+        Code S S' E-lam E'
   RET : Code (typ α₁ ∷ clo-ty (typ α₁ ∷ S) S' E E' ∷ S) S' (α₂ ∷ E-lam) E'
   APP : Code (typ α₁ ∷ S) S' E E' → Code (typ α₂ ∷ typ (α₂ ⇒ α₁) ∷ S) S' E E'
   HALT : Code S S E E
@@ -114,7 +117,7 @@ infixr 40 _▷_
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
 comp (Var v) c = LOOKUP v c
-comp (Abs e) c = ABS e c
+comp (Abs e) c = ABS (comp e RET) c
 comp (App e₁ e₂) c = comp e₁ (comp e₂ (APP c))
 
 lookup-conv : var α E → Env-conv E → Value-conv α
@@ -127,7 +130,7 @@ exec (PUSH n c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (Num-conv n) ▷ s , env-c
 exec (ADD c) ⟨ VAL (Num-conv m) ▷ VAL (Num-conv n) ▷ s , env-conv ⟩ =
   exec c ⟨ VAL (Num-conv (n + m)) ▷ s , env-conv ⟩
 exec (LOOKUP v c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (lookup-conv v env-conv) ▷ s , env-conv ⟩
-exec (ABS e c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (Clo-conv (comp e RET) env-conv) ▷ s , env-conv ⟩
+exec (ABS code c) ⟨ s , env-conv ⟩ = exec c ⟨ VAL (Clo-conv code env-conv) ▷ s , env-conv ⟩
 exec RET ⟨ VAL v₁-conv ▷ CLO c env-conv ▷ s , _ ⟩ = exec c ⟨ VAL v₁-conv ▷ s , env-conv ⟩
 exec (APP c) ⟨ (VAL v₂-conv) ▷ VAL (Clo-conv {S = S} {S' = S'} {E = E} {E' = E'} code-lam env-lam) ▷ s , env-conv ⟩
  = exec {!code-lam!} {!!}
@@ -212,7 +215,7 @@ correct (Abs e) c s env =
   begin
     exec (comp (Abs e) c) ⟨ s , conv-env env ⟩
   ≡⟨ refl ⟩
-    exec (ABS e c) ⟨ s , conv-env env ⟩
+    exec (ABS (comp e RET) c) ⟨ s , conv-env env ⟩
   -- ≡⟨ {!!} ⟩
   --   exec c ⟨ VAL (Clo-conv (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
   -- ≡⟨ {!!} ⟩
