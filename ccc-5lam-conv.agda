@@ -85,7 +85,7 @@ data Code : List STy → List STy → List Ty → List Ty → Set where
   PUSH : (n : ℕ) → Code (typ nat ∷ S) S' E E' → Code S S' E E'
   ADD : Code (typ nat ∷ S) S' E E' → Code (typ nat ∷ typ nat ∷ S) S' E E'
   LOOKUP : var α E → Code (typ α ∷ S) S' E E' → Code S S' E E'
-  ABS : Expr α₁ (α₂ ∷ E) → Code (typ (α₂ ⇒ α₁) ∷ S) S' E E' → Code S S' E E'
+  ABS : Code [] (typ α₁ ∷ []) (α₂ ∷ E) (α₂ ∷ E) → Code (typ (α₂ ⇒ α₁) ∷ S) S' E E' → Code S S' E E'
   APP : Code (typ α₁ ∷ S) S' E E' → Code (typ (α₂ ⇒ α₁) ∷ typ α₂ ∷ S) S' E E'
   HALT : Code S S E E
 
@@ -93,14 +93,20 @@ comp : Expr α E → Code (typ α ∷ S) S' E E' → Code S S' E E'
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
 comp (Var v) c = LOOKUP v c
-comp (Abs e) c = ABS e c
+comp (Abs e) c = ABS (comp e HALT) c
 comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
+
+compile : Expr α E → Code S (typ α ∷ S) E E
+compile e = comp e HALT
+
+head : Stack (typ α₁ ∷ S) → El α₁
+head (x ▷ _) = x
 
 exec : Code S S' E E' → Stack S × Env E → Stack S' × Env E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
 exec (ADD c) ⟨ m ▷ n ▷ s , env ⟩ = exec c ⟨ (n + m) ▷ s , env ⟩
 exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ (lookup v env) ▷ s , env ⟩
-exec (ABS e c) ⟨ s , env ⟩ = exec c ⟨ (λ x → eval e (cons x env)) ▷ s , env ⟩ -- ここでeval使える?
+exec (ABS code c) ⟨ s , env ⟩ = exec c ⟨ (λ x → head (proj₁ (exec code ⟨ ϵ , cons x env ⟩))) ▷ s , env ⟩
 exec (APP c) ⟨ lam ▷ x ▷ s , env ⟩ = exec c ⟨ lam x ▷ s , env ⟩
 exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
 
@@ -154,9 +160,12 @@ correct (Abs e) c s env =
   begin
     exec (comp (Abs e) c) ⟨ s , env ⟩
   ≡⟨ refl ⟩
-    exec (ABS e c) ⟨ s , env ⟩
+    exec (ABS (comp e HALT) c) ⟨ s , env ⟩
   ≡⟨ refl ⟩
-    exec c ⟨ (λ x → eval e (cons x env)) ▷ s , env ⟩
+    exec c ⟨ (λ x → head (proj₁ (exec (comp e HALT) ⟨ ϵ , cons x env ⟩))) ▷ s , env ⟩
+  ≡⟨ {!!} ⟩
+  --≡⟨ {!cong (λ pr → exec c ⟨ (λ x → head (proj₁ pr)) ▷ s , env ⟩) (correct e HALT ϵ (cons x env))!} ⟩
+    exec c ⟨ (λ x → head (proj₁ (exec HALT ⟨ eval e (cons x env) ▷ ϵ , cons x env ⟩))) ▷ s , env ⟩
   ≡⟨ refl ⟩
     exec c ⟨ eval (Abs e) env ▷ s , env ⟩
   ∎
@@ -175,9 +184,6 @@ correct (App e₁ e₂) c s env =
   ≡⟨ refl ⟩
     exec c ⟨ eval (App e₁ e₂) env ▷ s , env ⟩
   ∎
-
-compile : Expr α E → Code S (typ α ∷ S) E E
-compile e = comp e HALT
   
 correct' : (e : Expr α E) (s : Stack S) (env : Env E) → exec (compile e) ⟨ s , env ⟩ ≡ ⟨ eval e env ▷ s , env ⟩
 correct' e s env =
