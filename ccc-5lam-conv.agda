@@ -56,7 +56,7 @@ eval (Abs e) env = λ x → eval e (cons x env)
 eval (App e₁ e₂) env = (eval e₁ env) (eval e₂ env)
 
 data STy : Set
-data Code : List STy → List STy → List Ty → Set
+data Code : List STy → List STy → List Ty → List Ty → Set
 variable
   S S' : List STy
   β : STy
@@ -65,7 +65,7 @@ data STy where
   nat-typ : STy
   lst-typ : (E : List Ty) → STy
   --lam-typ : STy --(l : Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) → STy
-  lam-typ : (α₁ α₂ : Ty) (S S' : List STy) (E E-lam : List Ty) → STy
+  lam-typ : (α₁ α₂ : Ty) (S S' : List STy) (E E' E-lam : List Ty) → STy
 
 to-STy : Ty → STy
 to-STy nat = nat-typ
@@ -74,7 +74,7 @@ to-STy (α₂ ⇒ α₁) = {!!}
 El-STy : STy → Set
 El-STy nat-typ = ℕ
 El-STy (lst-typ E) = Env E
-El-STy (lam-typ α₁ α₂ S S' E E-lam) = Code (to-STy α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)
+El-STy (lam-typ α₁ α₂ S S' E E' E-lam) = Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E'
 
 -- El-STy : {S S' : List STy} {E E-lam : List Ty} → STy → Set
 -- El-STy (typ nat) = ℕ
@@ -91,21 +91,21 @@ data Stack : List STy → Set where
 infixr 40 _▷_
 
 data Code where
-  PUSH : (n : ℕ) → Code (nat-typ ∷ S) S' E → Code S S' E
-  ADD : Code (nat-typ ∷ S) S' E → Code (nat-typ ∷ nat-typ ∷ S) S' E
-  LOOKUP : var α E → Code (to-STy α ∷ S) S' E → Code S S' E
-  ABS : (Code (to-STy α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) →
-        Code (lam-typ α₁ α₂ S S' E E-lam ∷ S) S' E-lam →
+  PUSH : (n : ℕ) → Code (nat-typ ∷ S) S' E E' → Code S S' E E'
+  ADD : Code (nat-typ ∷ S) S' E E' → Code (nat-typ ∷ nat-typ ∷ S) S' E E'
+  LOOKUP : var α E → Code (to-STy α ∷ S) S' E E' → Code S S' E E'
+  ABS : (Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E') →
+        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ S) S' E-lam E' →
         --Code (lam-typ {α₁} {S} {S'} {E} {α₂} {E-lam} (Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) ∷ lst-typ E-lam ∷ S) S' E-lam →
-        Code S S' E-lam
-  RET : Code (to-STy α₁ ∷ S) S' E → Code (to-STy α₁ ∷ lst-typ E ∷ S) S' (α₂ ∷ E-lam)
+        Code S S' E-lam E'
+  RET : Code (to-STy α₁ ∷ S) S' E E' → Code (to-STy α₁ ∷ lst-typ E ∷ S) S' (α₂ ∷ E-lam) E'
   -- APP : Code (typ α₁ ∷ S) S' E →
   --       Code (lam-typ (Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) ∷ typ α₂ ∷ S)
   --            S'
   --            E
-  HALT : Code S S E
+  HALT : Code S S E E
 
-comp : Expr α E → Code (to-STy α ∷ S) S' E → Code S S' E
+comp : Expr α E → Code (to-STy α ∷ S) S' E E' → Code S S' E E'
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
 comp (Var v) c = LOOKUP v c
@@ -113,11 +113,11 @@ comp (Abs e) c = ABS (λ c' → (comp e (RET c'))) c
 --comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 
-exec : Code S S' E → Stack S × Env E → Stack S' × Env E
+exec : Code S S' E E' → Stack S × Env E → Stack S' × Env E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
 exec (ADD c) ⟨ m ▷ n ▷ s , env ⟩ = exec c ⟨ (n + m) ▷ s , env ⟩
 --exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ (lookup v env) ▷ s , env ⟩
---exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ lam ▷ env-lam ▷ s , env-lam ⟩
+-- exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ lam ▷ env-lam ▷ s , env-lam ⟩
 exec (RET c') ⟨ x₁ ▷ env ▷ s , cons x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
 --exec (APP c) ⟨ lam ▷ env-lam ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons x₂ env-lam ⟩
 exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
