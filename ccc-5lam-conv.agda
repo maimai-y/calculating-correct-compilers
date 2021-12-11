@@ -95,7 +95,7 @@ data Code where
   ADD : Code (nat-typ ∷ S) S' E E' → Code (nat-typ ∷ nat-typ ∷ S) S' E E'
   LOOKUP : var α E → Code (to-STy α ∷ S) S' E E' → Code S S' E E'
   ABS : (Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E') →
-        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ S) S' E-lam E' →
+        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ lst-typ E-lam ∷ S) S' E-lam E' →
         --Code (lam-typ {α₁} {S} {S'} {E} {α₂} {E-lam} (Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) ∷ lst-typ E-lam ∷ S) S' E-lam →
         Code S S' E-lam E'
   RET : Code (to-STy α₁ ∷ S) S' E E' → Code (to-STy α₁ ∷ lst-typ E ∷ S) S' (α₂ ∷ E-lam) E'
@@ -117,7 +117,7 @@ exec : Code S S' E E' → Stack S × Env E → Stack S' × Env E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
 exec (ADD c) ⟨ m ▷ n ▷ s , env ⟩ = exec c ⟨ (n + m) ▷ s , env ⟩
 --exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ (lookup v env) ▷ s , env ⟩
--- exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ lam ▷ env-lam ▷ s , env-lam ⟩
+exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ lam ▷ env-lam ▷ s , env-lam ⟩
 exec (RET c') ⟨ x₁ ▷ env ▷ s , cons x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
 --exec (APP c) ⟨ lam ▷ env-lam ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons x₂ env-lam ⟩
 exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
