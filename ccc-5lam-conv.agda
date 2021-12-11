@@ -74,7 +74,7 @@ to-STy (α₂ ⇒ α₁) = {!!}
 El-STy : STy → Set
 El-STy nat-typ = ℕ
 El-STy (lst-typ E) = Env E
-El-STy (lam-typ α₁ α₂ S S' E E' E-lam) = Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E'
+El-STy (lam-typ α₁ α₂ S S' E E' E-lam) = (Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E') × Env E-lam
 
 -- El-STy : {S S' : List STy} {E E-lam : List Ty} → STy → Set
 -- El-STy (typ nat) = ℕ
@@ -95,14 +95,12 @@ data Code where
   ADD : Code (nat-typ ∷ S) S' E E' → Code (nat-typ ∷ nat-typ ∷ S) S' E E'
   LOOKUP : var α E → Code (to-STy α ∷ S) S' E E' → Code S S' E E'
   ABS : (Code (to-STy α₁ ∷ S) S' E E' → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam) E') →
-        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ lst-typ E-lam ∷ S) S' E-lam E' →
+        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ S) S' E-lam E' →
         --Code (lam-typ {α₁} {S} {S'} {E} {α₂} {E-lam} (Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) ∷ lst-typ E-lam ∷ S) S' E-lam →
         Code S S' E-lam E'
   RET : Code (to-STy α₁ ∷ S) S' E E' → Code (to-STy α₁ ∷ lst-typ E ∷ S) S' (α₂ ∷ E-lam) E'
-  -- APP : Code (typ α₁ ∷ S) S' E →
-  --       Code (lam-typ (Code (typ α₁ ∷ S) S' E → Code (lst-typ E ∷ S) S' (α₂ ∷ E-lam)) ∷ typ α₂ ∷ S)
-  --            S'
-  --            E
+  APP : Code (to-STy α₁ ∷ S) S' E E' →
+        Code (lam-typ α₁ α₂ S S' E E' E-lam ∷ to-STy α₂ ∷ S) S E E'
   HALT : Code S S E E
 
 comp : Expr α E → Code (to-STy α ∷ S) S' E E' → Code S S' E E'
@@ -117,9 +115,9 @@ exec : Code S S' E E' → Stack S × Env E → Stack S' × Env E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
 exec (ADD c) ⟨ m ▷ n ▷ s , env ⟩ = exec c ⟨ (n + m) ▷ s , env ⟩
 --exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ (lookup v env) ▷ s , env ⟩
-exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ lam ▷ env-lam ▷ s , env-lam ⟩
+exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ ⟨ lam , env-lam ⟩ ▷ s , env-lam ⟩
 exec (RET c') ⟨ x₁ ▷ env ▷ s , cons x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
---exec (APP c) ⟨ lam ▷ env-lam ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons x₂ env-lam ⟩
+--exec (APP c) ⟨ ⟨ lam ,  env-lam ⟩ ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons x₂ env-lam ⟩
 exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
 
 {-
