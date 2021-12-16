@@ -86,17 +86,18 @@ conv-ty (α₂ ⇒ α₁ , E-lam) = (conv-ty α₂ ⇒-c conv-ty α₁ , conv-ty
 conv-ty-lst [] = []
 conv-ty-lst (fst ∷ rst) = conv-ty fst ∷ conv-ty-lst rst
 
-El-Ty-c : {S S' : List STy} {E-c E'-c : List Ty-c} → Ty-c → Set
+--El-Ty-c : {S S' : List STy} {E-c E'-c : List Ty-c} → Ty-c → Set
+El-Ty-c : Ty-c → Set
 
 data Env-c : List Ty-c → Set where
   nil-c : Env-c []
   cons-c : El-Ty-c α-c → Env-c E-c → Env-c (α-c ∷ E-c)
 
 El-Ty-c nat-c = ℕ
-El-Ty-c {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (α₂-c ⇒-c α₁-c , E-lam-c)
---El-Ty-c (α₂-c ⇒-c α₁-c , E-lam-c)
-  = --{S S' : List STy} {E-c E'-c : List Ty-c} →
-    (Code (VAL α₁-c ∷ S) S' E-c E'-c --S S' E-c E'-c はここのラムダ式の引数から割り当てることができるようにしたい
+--El-Ty-c {S = S} {S' = S'} {E-c = E-c} {E'-c = E'-c} (α₂-c ⇒-c α₁-c , E-lam-c)
+El-Ty-c (α₂-c ⇒-c α₁-c , E-lam-c)
+  = ({S S' : List STy} {E-c E'-c : List Ty-c}
+    → Code (VAL α₁-c ∷ S) S' E-c E'-c --S S' E-c E'-c はここのラムダ式の引数から割り当てることができるようにしたい
     → Code (ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c)
     × Env-c E-lam-c
 
@@ -113,8 +114,10 @@ data Code where
   PUSH : (n : ℕ) → Code (VAL nat-c ∷ S) S' E-c E'-c → Code S S' E-c E'-c
   ADD : Code (VAL nat-c ∷ S) S' E-c E'-c → Code (VAL nat-c ∷ VAL nat-c ∷ S) S' E-c E'-c
   LOOKUP : var α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) E'-c → Code S S' (conv-ty-lst E) E'-c
-  ABS : (Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c) →
-        Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ S) S' E-lam-c E'-c →
+  ABS : --(({S S' : List STy} {E-c E'-c : List Ty-c} →
+        --Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c) {S} {S'} {E} {E'}) →
+        ({S S' : List STy} {E-c E'-c : List Ty-c} → Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c) → --exec ABSの定義においてlamの型
+        Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ S) S' E-lam-c E'-c →  --exec ABSの定義においてcの型
         Code S S' E-lam-c E'-c
   RET : Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (VAL α₁-c ∷ ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c
   APP : Code (VAL α₁-c ∷ S) S' E-c E'-c →
@@ -125,7 +128,7 @@ comp : Expr α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) (conv-ty-l
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
 comp (Var v) c = LOOKUP v c
-comp (Abs e) c = ABS (λ c' → (comp e (RET c'))) c
+--comp (Abs e) c = ABS (λ c' → (comp e (RET c'))) c
 comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 lookup-c : var α E → Env-c (conv-ty-lst E) → El-Ty-c (conv-ty α)
@@ -137,6 +140,7 @@ exec : Code S S' E-c E'-c → Stack S × Env-c E-c → Stack S' × Env-c E'-c
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
 exec (ADD c) ⟨ m ▷ n ▷ s , env ⟩ = exec c ⟨ (n + m) ▷ s , env ⟩
 exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ (lookup-c v env) ▷ s , env ⟩
+-- exec (ABS {α₁-c = α₁-c} {α₂-c = α₂-c} {E-lam-c = E-lam-c} lam c) ⟨ s , env-lam ⟩ = exec {S = (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ _)} c ⟨ ⟨ lam , env-lam ⟩ ▷ s , env-lam ⟩
 exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ ⟨ lam , env-lam ⟩ ▷ s , env-lam ⟩
 exec (RET c') ⟨ x₁ ▷ env ▷ s , cons-c x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
 exec (APP c) ⟨ ⟨ lam ,  env-lam ⟩ ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons-c x₂ env-lam ⟩
@@ -146,7 +150,8 @@ conv-env : Env E → Env-c (conv-ty-lst E)
 
 conv : {α : Ty} → El α → El-Ty-c (conv-ty α)
 conv {nat} n = n
-conv {α₂ ⇒ α₁ , E} (clo e-lam e-env) = ⟨ (λ c' → comp e-lam (RET c')) , conv-env e-env ⟩
+--conv {α₂ ⇒ α₁ , E} (clo e-lam e-env) = ⟨ (λ c' → comp e-lam (RET c')) , conv-env e-env ⟩
+conv {α₂ ⇒ α₁ , E} (clo e-lam e-env) = ⟨ (λ c' → {!!}) , conv-env e-env ⟩
 
 conv-env nil = nil-c
 conv-env (cons v env) = cons-c (conv v) (conv-env env)
@@ -169,6 +174,7 @@ lemma-order-exchange (suc v) (cons x env) =
 -- lemma-conv-env : {E-lam : List Ty} (env-lam-c : Env-c (conv-ty-lst E-lam)) (env-lam : Env E-lam) → conv-env env-lam ≡ env-lam-c
 -- lemma-conv-env env-lam-c env-lam = {!!}
 
+{-# TERMINATING #-}
 correct :
   (e : Expr α E)
   (c : Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E'))
@@ -225,7 +231,7 @@ correct (Abs e) c s env =
   --   exec c ⟨ VAL (Clo-c (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
   -- ≡⟨ {!!} ⟩
   --   exec c ⟨ VAL (conv (Clo e env)) ▷ s , conv-env env ⟩
-  ≡⟨ refl ⟩
+  ≡⟨ {!!} ⟩
     exec c ⟨ conv (eval (Abs e) env) ▷ s , conv-env env ⟩
   ∎
 
@@ -239,11 +245,12 @@ correct (App e₁ e₂) c s env | ⟨ lam , env-lam-c ⟩ | [ eq1 ] | clo e-lam 
     exec (comp e₁ (APP c)) ⟨ conv (eval e₂ env) ▷ s , conv-env env ⟩
   ≡⟨ correct e₁ (APP c) (conv (eval e₂ env) ▷ s) env ⟩
     exec (APP c) ⟨ conv (eval e₁ env) ▷ conv (eval e₂ env) ▷ s , conv-env env ⟩
-  ≡⟨ cong (λ v₁ → exec (APP c) ⟨ conv v₁ ▷ conv (eval e₂ env) ▷ s , conv-env env ⟩) eq1 ⟩
+  ≡⟨ {!!} ⟩
+  --≡⟨ cong (λ v₁ → exec (APP c) ⟨ conv v₁ ▷ conv (eval e₂ env) ▷ s , conv-env env ⟩) eq1 ⟩
     exec (APP c) ⟨ ⟨ lam ,  env-lam-c ⟩ ▷ conv (eval e₂ env) ▷ s , conv-env env ⟩
   ≡⟨ refl ⟩
     exec (lam c) ⟨ conv-env env ▷ s , cons-c (conv (eval e₂ env)) env-lam-c ⟩
-  ≡⟨ refl ⟩
+  ≡⟨ {!!} ⟩
   --   exec (comp e-lam (RET c)) ⟨ conv-env env ▷ s , cons-c (conv (eval e₂ env)) env-lam-c ⟩
   -- ≡⟨ {!cong (λ env-lam-c → exec (comp e-lam (RET c)) ⟨ conv-env env ▷ s , cons-c (conv (eval e₂ env)) env-lam-c ⟩) (lemma-conv-env env-lam-c env-lam)!} ⟩
   --   exec (comp e-lam (RET c)) ⟨ conv-env env ▷ s , cons-c (conv (eval e₂ env)) (conv-env env-lam) ⟩
@@ -296,15 +303,15 @@ Expr6 = App (App (Abs (Abs (Add (Var zero) (Var (suc zero))))) (Val 3)) (Val 5)
 Expr7 : Expr nat []
 Expr7 = App (App (Abs (Abs (Add (Var zero) (App (Var (suc zero)) (Val 1))))) (Abs (Add (Var zero) (Val 1)))) (Val 3)
 
-test3 : exec (compile Expr3) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 3 ▷ ϵ , nil-c ⟩
-test3 = refl
+-- test3 : exec (compile Expr3) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 3 ▷ ϵ , nil-c ⟩
+-- test3 = refl
 
-test5 : exec (compile Expr5) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 5 ▷ ϵ , nil-c ⟩
-test5 = refl
+-- test5 : exec (compile Expr5) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 5 ▷ ϵ , nil-c ⟩
+-- test5 = refl
 
-test6 : exec (compile Expr6) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 8 ▷ ϵ , nil-c ⟩
-test6 = refl
+-- test6 : exec (compile Expr6) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 8 ▷ ϵ , nil-c ⟩
+-- test6 = refl
 
-test7 : exec (compile Expr7) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 5 ▷ ϵ , nil-c ⟩
-test7 = refl
+-- test7 : exec (compile Expr7) ⟨ ϵ , nil-c ⟩ ≡ ⟨ 5 ▷ ϵ , nil-c ⟩
+-- test7 = refl
 
