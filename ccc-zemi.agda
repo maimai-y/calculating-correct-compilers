@@ -13,6 +13,7 @@ data Ty : Set where
 
 data Expr : Ty → List Ty → Set
 data Env : List Ty → Set
+data Value : Ty → Set
 
 -- the following variables automatically become implicit arguments
 variable
@@ -22,13 +23,14 @@ variable
 -- data ℂ : Ty → Ty → List Ty → Set where
 --   clo : Expr α₁ (α₂ ∷ E) → Env E → ℂ α₂ α₁ E
 
-El : Ty → Set
-El nat = ℕ
-El (α₂ ⇒ α₁) = El α₂ → El α₁
+-- El : Ty → Set
+-- El nat = ℕ
+-- El (α₂ ⇒ α₁) = El α₂ → El α₁
+
 
 data Env where
   nil : Env []
-  cons : El α → Env E → Env (α ∷ E)
+  cons : Value α → Env E → Env (α ∷ E)
 
 -- variables
 data var : (α : Ty) (E : List Ty) → Set where
@@ -45,25 +47,51 @@ data Expr where
         (e₂ : Expr α₂ E) →
         Expr α₁ E
 
-lookup : var α E → Env E → El α
+data Value where
+  Num : (n : ℕ) → Value nat
+  Clo : (exp : Expr α₁ (α₂ ∷ E)) (env : Env E) → Value (α₂ ⇒ α₁)
+
+lookup : var α E → Env E → Value α
 lookup zero (cons x env) = x
 lookup (suc v) (cons x env) = lookup v env
 
-eval : (Expr α E) → Env E → El α
-eval (Val n) env = n
-eval (Add e₁ e₂) env = (eval e₁ env) + (eval e₂ env)
-eval (Var v) env = lookup v env
-eval (Abs e) env = λ x → eval e (cons x env)
-eval (App e₁ e₂) env = (eval e₁ env) (eval e₂ env)
+-- fun
+-- eval : (Expr α E) → Env E → El α
+-- eval (Val n) env = n
+-- eval (Add e₁ e₂) env = (eval e₁ env) + (eval e₂ env)
+-- eval (Var v) env = lookup v env
+-- eval (Abs e) env = λ x → eval e (cons x env)
+-- eval (App e₁ e₂) env = (eval e₁ env) (eval e₂ env)
 
--- data Ty-c : Set
--- data STy : Set
-data Code : List Ty → List Ty → Set
+data eval : (Expr α E) → Env E → Value α → Set where
+  eNum : {env : Env E} (n : ℕ) → eval (Val n) env (Num n)
+  eAdd : {env : Env E} {n m : ℕ} {x y : Expr nat E} →
+         eval x env (Num n) →
+         eval y env (Num m) →
+         eval (Add x y) env (Num (n + m))
+
+data Env' : List Ty → Set
+data Value' : Ty → Set
+data Code : (List Ty × Env' E) → (List Ty × Env' E') → Set
+
 variable
 --   α-c α'-c α₁-c α₂-c σ-c : Ty-c
   S S' : List Ty
+  env env' : Env' E
 --   E-c E'-c E-lam-c : List Ty-c
 --   β : STy
+
+data Env' where
+  nil' : Env' []
+  cons' : Value' α → Env' E → Env' (α ∷ E)
+
+data Value' where
+  Num' : (n : ℕ) → Value' nat
+  Clo' : (code : Code ⟨ S , env ⟩ ⟨ S' , env' ⟩) (env : Env' E) → Value' (α₂ ⇒ α₁)
+-- data Ty-c : Set
+-- data STy : Set
+
+comp : {env : Env' E} → Expr α E → Code ⟨ (α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
   
 -- data Ty-c where
 --   nat-c : Ty-c
@@ -98,7 +126,7 @@ variable
 -- El-STy : STy → Set
 -- El-STy (VAL α-c) = El-Ty-c α-c
 -- El-STy (ENV E) = Env-c E
-
+{-
 data Elem : Ty → Set where
   Val : (n : ℕ) → Elem nat
   Clo : (El α₂ → El α₁) → Elem (α₂ ⇒ α₁)  --(e : Expr α₁ E) (env : Env E) → Elem (α₂ ⇒ α₁)
@@ -167,13 +195,14 @@ conv {α₂ ⇒ α₁} f = Clo f
 -- conv-env (cons v env) = cons-c (conv v) (conv-env env)
 
 
+
 correct :
   (e : Expr α E)
   (c : Code (α ∷ S) S')
   (s : Stack S)
   (env : Env E)
   →
-  exec (comp e c) s ≡ exec c (conv (eval e env) ▷ s)
+  exec (comp e c) s ≡ eval e env (λ v → exec c (conv v ▷ s))
 
 correct {E = E} (Val n) c s env =
   begin
@@ -197,3 +226,5 @@ correct (App e₁ e₂) c s env =
   ≡⟨ {!!} ⟩
     exec c (conv (eval e₁ env (eval e₂ env)) ▷ s)
   ∎
+
+-}
