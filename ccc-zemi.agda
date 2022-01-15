@@ -70,28 +70,28 @@ data eval : (Expr α E) → Env E → Value α → Set where
          eval y env (Num m) →
          eval (Add x y) env (Num (n + m))
 
-data Env' : List Ty → Set
-data Value' : Ty → Set
-data Code : (List Ty × Env' E) → (List Ty × Env' E') → Set
+data Env-c : List Ty → Set
+data Value-c : Ty → Set
+data Code : (List Ty × Env-c E) → (List Ty × Env-c E') → Set
 
 variable
 --   α-c α'-c α₁-c α₂-c σ-c : Ty-c
   S S' : List Ty
-  env env' : Env' E
+  env env' : Env-c E
 --   E-c E'-c E-lam-c : List Ty-c
 --   β : STy
 
-data Env' where
-  nil' : Env' []
-  cons' : Value' α → Env' E → Env' (α ∷ E)
+data Env-c where
+  nil-c : Env-c []
+  cons-c : Value-c α → Env-c E → Env-c (α ∷ E)
 
-data Value' where
-  Num' : (n : ℕ) → Value' nat
-  Clo' : (code : Code ⟨ S , env ⟩ ⟨ S' , env' ⟩) (env : Env' E) → Value' (α₂ ⇒ α₁)
+data Value-c where
+  Num-c : (n : ℕ) → Value-c nat
+  Clo-c : (code : Code ⟨ S , env ⟩ ⟨ S' , env' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
 -- data Ty-c : Set
 -- data STy : Set
 
-comp : {env : Env' E} → Expr α E → Code ⟨ (α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
+comp : {env : Env-c E} → Expr α E → Code ⟨ (α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
   
 -- data Ty-c where
 --   nat-c : Ty-c
