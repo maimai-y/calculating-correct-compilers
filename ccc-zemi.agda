@@ -18,15 +18,7 @@ data Value : Ty → Set
 -- the following variables automatically become implicit arguments
 variable
   α α₁ α₂ σ : Ty
-  E E' E-lam : List Ty
-
--- data ℂ : Ty → Ty → List Ty → Set where
---   clo : Expr α₁ (α₂ ∷ E) → Env E → ℂ α₂ α₁ E
-
--- El : Ty → Set
--- El nat = ℕ
--- El (α₂ ⇒ α₁) = El α₂ → El α₁
-
+  E E' Eλ : List Ty
 
 data Env where
   nil : Env []
@@ -55,7 +47,7 @@ lookup : var α E → Env E → Value α
 lookup zero (cons x env) = x
 lookup (suc v) (cons x env) = lookup v env
 
--- fun
+-- functional semantics
 -- eval : (Expr α E) → Env E → El α
 -- eval (Val n) env = n
 -- eval (Add e₁ e₂) env = (eval e₁ env) + (eval e₂ env)
@@ -63,23 +55,38 @@ lookup (suc v) (cons x env) = lookup v env
 -- eval (Abs e) env = λ x → eval e (cons x env)
 -- eval (App e₁ e₂) env = (eval e₁ env) (eval e₂ env)
 
+-- relational semantics
 data eval : (Expr α E) → Env E → Value α → Set where
-  eNum : {env : Env E} (n : ℕ) → eval (Val n) env (Num n)
-  eAdd : {env : Env E} {n m : ℕ} {x y : Expr nat E} →
-         eval x env (Num n) →
-         eval y env (Num m) →
-         eval (Add x y) env (Num (n + m))
+  eNum : {env : Env E}
+         (n : ℕ) → eval (Val n) env (Num n)
+  eAdd : {env : Env E} {n m : ℕ} {x y : Expr nat E}
+         → eval x env (Num n)
+         → eval y env (Num m)
+         → eval (Add x y) env (Num (n + m))
+  eVar : {env : Env E} {v : var α E}
+         → eval (Var v) env (lookup v env)
+  eAbs : {envλ : Env Eλ} {eλ : Expr α₁ (α₂ ∷ Eλ)}
+         → eval (Abs eλ) envλ (Clo eλ envλ)
+  eApp : {env : Env E}
+         {eλ : Expr α₁ (α₂ ∷ Eλ)} {envλ : Env Eλ}
+         {e₁ : Expr (α₂ ⇒ α₁) E} {v₁ : Value α₁}
+         {e₂ : Expr α₂ E} {v₂ : Value α₂}
+         → eval e₁ env (Clo eλ envλ)
+         → eval e₂ env v₂
+         → eval eλ (cons v₂ envλ) v₁
+         → eval (App e₁ e₂) env v₁
+
+data STy : Set where
+  VAL : Ty → STy
+  --CLO : List Ty-c → STy
 
 data Env-c : List Ty → Set
 data Value-c : Ty → Set
-data Code : (List Ty × Env-c E) → (List Ty × Env-c E') → Set
+data Code : (List STy × Env-c E) → (List STy × Env-c E') → Set
 
 variable
---   α-c α'-c α₁-c α₂-c σ-c : Ty-c
-  S S' : List Ty
+  S S' : List STy
   env env' : Env-c E
---   E-c E'-c E-lam-c : List Ty-c
---   β : STy
 
 data Env-c where
   nil-c : Env-c []
@@ -88,57 +95,24 @@ data Env-c where
 data Value-c where
   Num-c : (n : ℕ) → Value-c nat
   Clo-c : (code : Code ⟨ S , env ⟩ ⟨ S' , env' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
--- data Ty-c : Set
--- data STy : Set
 
-comp : {env : Env-c E} → Expr α E → Code ⟨ (α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
-  
--- data Ty-c where
---   nat-c : Ty-c
---   _⇒-c_,_ : Ty-c → Ty-c → List Ty-c → Ty-c
-
--- data STy where
---   VAL : Ty → STy
---   CLO : List Ty-c → STy
-
--- conv-ty-lst : List Ty → List Ty-c
-
--- conv-ty : Ty → Ty-c
--- conv-ty nat = nat-c
--- conv-ty (α₂ ⇒ α₁ , E-lam) = (conv-ty α₂ ⇒-c conv-ty α₁ , conv-ty-lst E-lam)
-
--- conv-ty-lst [] = []
--- conv-ty-lst (fst ∷ rst) = conv-ty fst ∷ conv-ty-lst rst
-
--- El-Ty-c : Ty-c → Set
+comp : {env : Env-c E} → Expr α E → Code ⟨ (VAL α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
 
 -- data Env-c : List Ty-c → Set where
 --   nil-c : Env-c []
 --   cons-c : El-Ty-c α-c → Env-c E-c → Env-c (α-c ∷ E-c)
 
--- El-Ty-c nat-c = ℕ
--- El-Ty-c (α₂-c ⇒-c α₁-c , E-lam-c)
---   = ({S S' : List STy} {E E' : List Ty}
---     → Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') --S S' E-c E'-c はここのラムダ式の引数から割り当てる
---     → Code (ENV (conv-ty-lst E) ∷ S) S' (α₂-c ∷ E-lam-c) (conv-ty-lst E'))
---     × Env-c E-lam-c
+data Elem : STy → Set where
+  EVal : (v : Value α) → Elem (VAL α)
+  -- EClo : (clo : Value (α₂ ⇒ α₁)) → Elem (α₂ ⇒ α₁)  --(e : Expr α₁ E) (env : Env E) → Elem (α₂ ⇒ α₁)
 
--- El-STy : STy → Set
--- El-STy (VAL α-c) = El-Ty-c α-c
--- El-STy (ENV E) = Env-c E
-{-
-data Elem : Ty → Set where
-  Val : (n : ℕ) → Elem nat
-  Clo : (El α₂ → El α₁) → Elem (α₂ ⇒ α₁)  --(e : Expr α₁ E) (env : Env E) → Elem (α₂ ⇒ α₁)
-
-data Stack : List Ty → Set where
+data Stack : List STy → Set where
   ϵ : Stack []
-  _▷_ : Elem α → Stack S → Stack (α ∷ S)
+  _▷_ : Elem (VAL α) → Stack S → Stack (VAL α ∷ S)
 infixr 40 _▷_
 
-
 data Code where
-  PUSH : (n : ℕ) → (c : Code (nat ∷ S) S') → Code S S'
+  --PUSH : (n : ℕ) → (c : Code (nat ∷ S) S') → Code S S'
 --   ADD : Code (VAL nat-c ∷ S) S' E-c E'-c → Code (VAL nat-c ∷ VAL nat-c ∷ S) S' E-c E'-c
 --   LOOKUP : var α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) E'-c → Code S S' (conv-ty-lst E) E'-c
 --   ABS : ({S S' : List STy} {E E' : List Ty} →
@@ -150,13 +124,14 @@ data Code where
 --   APP : Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
 --         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ VAL α₂-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E')
 --   HALT : Code S S E-c E-c
-
+{-
 comp : Expr α E → Code (α ∷ S) S' → Code S S'
 comp (Val n) c = PUSH n c
 comp (Add x x₁) c = {!!}
 comp (Var v) c = {!!}
 comp (Abs x) c = {!!}
 comp (App x x₁) c = {!!}
+-}
 -- comp : Expr α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') → Code S S' (conv-ty-lst E) (conv-ty-lst E')
 -- comp (Val n) c = PUSH n c
 -- comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
@@ -173,8 +148,10 @@ comp (App x x₁) c = {!!}
 -- lookup-c zero (cons-c fst rest) = fst
 -- lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
-exec : Code S S' → (s : Stack S) → Stack S'
+--exec : {env : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S → Stack S'
+{-
 exec (PUSH n c) s = exec c (Val n ▷ s)
+-}
 -- {-# TERMINATING #-}
 -- exec : Code S S' E-c E'-c → Stack S × Env-c E-c → Stack S' × Env-c E'-c
 -- exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ n ▷ s , env ⟩
@@ -184,11 +161,12 @@ exec (PUSH n c) s = exec c (Val n ▷ s)
 -- exec (RET c') ⟨ x₁ ▷ env ▷ s , cons-c x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
 -- exec (APP c) ⟨ ⟨ lam ,  env-lam ⟩ ▷ x₂ ▷ s , env ⟩ = exec (lam c) ⟨ env ▷ s , cons-c x₂ env-lam ⟩
 -- exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
-
+{-
 -- conv-env : Env E → Env-c (conv-ty-lst E)
 conv : {α : Ty} → El α → Elem α
 conv {nat} n = Val n
 conv {α₂ ⇒ α₁} f = Clo f
+-}
 -- conv {α₂ ⇒ α₁ , E} (clo e-lam e-env) = ⟨ (λ c' → comp e-lam (RET c')) , conv-env e-env ⟩
 
 -- conv-env nil = nil-c
@@ -196,35 +174,36 @@ conv {α₂ ⇒ α₁} f = Clo f
 
 
 
-correct :
-  (e : Expr α E)
-  (c : Code (α ∷ S) S')
-  (s : Stack S)
-  (env : Env E)
-  →
-  exec (comp e c) s ≡ eval e env (λ v → exec c (conv v ▷ s))
+-- correct :
+--   (e : Expr α E)
+--   (c : {env : Env-c E} {env' : Env-c E'} → Code ⟨ (VAL α ∷ S) , env ⟩ ⟨ S' , env' ⟩)
+--   (s : Stack S)
+--   (env : Env E)
+--   {v : Value α}
+--   → (eval e env v)
+--   → exec (comp e c) s ≡ exec c (v ▷ s)
 
-correct {E = E} (Val n) c s env =
-  begin
-    exec (comp {E = E} (Val n) c) s
-  ≡⟨ refl ⟩
-    exec (PUSH n c) s
-  ≡⟨ refl ⟩
-    exec c (Val n ▷ s)
-  ∎
-correct (Add e e₁) c s env = {!!}
-correct (Var v) c s env = {!!}
-correct (Abs e) c s env =
-  begin
-    exec (comp (Abs e) c) s
-  ≡⟨ {!!} ⟩
-    exec c (Clo (λ x → eval e (cons x env)) ▷ s)
-  ∎
-correct (App e₁ e₂) c s env =
-  begin
-    exec (comp (App e₁ e₂) c) s
-  ≡⟨ {!!} ⟩
-    exec c (conv (eval e₁ env (eval e₂ env)) ▷ s)
-  ∎
 
--}
+-- correct {E = E} (Val n) c s env =
+--   begin
+--     exec (comp {E = E} (Val n) c) s
+--   ≡⟨ refl ⟩
+--     exec (PUSH n c) s
+--   ≡⟨ refl ⟩
+--     exec c (Val n ▷ s)
+--   ∎
+-- correct (Add e e₁) c s env = {!!}
+-- correct (Var v) c s env = {!!}
+-- correct (Abs e) c s env =
+--   begin
+--     exec (comp (Abs e) c) s
+--   ≡⟨ {!!} ⟩
+--     exec c (Clo (λ x → eval e (cons x env)) ▷ s)
+--   ∎
+-- correct (App e₁ e₂) c s env =
+--   begin
+--     exec (comp (App e₁ e₂) c) s
+--   ≡⟨ {!!} ⟩
+--     exec c (conv (eval e₁ env (eval e₂ env)) ▷ s)
+--   ∎
+
