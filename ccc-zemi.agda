@@ -82,11 +82,10 @@ data STy : Set where
 
 data Env-c : List Ty → Set
 data Value-c : Ty → Set
-data Code : (List STy × Env-c E) → (List STy × Env-c E') → Set
+data Code : (List STy × List Ty) → (List STy × List Ty) → Set
 
 variable
   S S' : List STy
-  env env' : Env-c E
 
 data Env-c where
   nil-c : Env-c []
@@ -94,9 +93,9 @@ data Env-c where
 
 data Value-c where
   Num-c : (n : ℕ) → Value-c nat
-  Clo-c : (code : Code ⟨ S , env ⟩ ⟨ S' , env' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
+  Clo-c : (code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
 
-comp : {env : Env-c E} → Expr α E → Code ⟨ (VAL α ∷ S) , env ⟩ ⟨ S' , env' ⟩ → Code ⟨ S , env ⟩ ⟨ S' , env' ⟩
+comp : {env : Env-c E} → Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
 
 -- data Env-c : List Ty-c → Set where
 --   nil-c : Env-c []
@@ -148,7 +147,7 @@ comp (App x x₁) c = {!!}
 -- lookup-c zero (cons-c fst rest) = fst
 -- lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
---exec : {env : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S → Stack S'
+exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' × Env-c E'
 {-
 exec (PUSH n c) s = exec c (Val n ▷ s)
 -}
