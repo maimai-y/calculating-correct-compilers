@@ -86,27 +86,17 @@ data Code : (List STy × List Ty) → (List STy × List Ty) → Set
 variable
   β : STy
   S S' : List STy
-  code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
-  env : Env-c E
 
 data STy where
   VAL : Ty → STy
-  --CLO : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Env-c E → STy
   CLO : List STy → List STy → List Ty → List Ty → STy
 
 data Env-c where
   nil-c : Env-c []
   cons-c : Value-c α → Env-c E → Env-c (α ∷ E)
 
--- Clo : (exp : Expr α₁ (α₂ ∷ E)) (env : Env E) → Value (α₂ ⇒ α₁)
--- comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
--- comp : Expr α₁ (α₂ ∷ E) → Code ⟨ (VAL α₁ ∷ S) , (α₂ ∷ E) ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , (α₂ ∷ E) ⟩ ⟨ S' , E' ⟩
-
 data Value-c where
   Num-c : (n : ℕ) → Value-c nat
-  -- Clo-c : (code : Code ⟨ CLO (VAL α₁ ∷ S) S' E E' ∷ S , α₂ ∷ Eλ ⟩ ⟨ VAL α₁ ∷ S , α₂ ∷ Eλ ⟩)
-  --         (env : Env-c Eλ)
-  --         → Value-c (α₂ ⇒ α₁)
   Clo-c : (code : {S S' : List STy} {E E' : List Ty} → Code ⟨ CLO (VAL α₁ ∷ S) S' E E' ∷ S , α₂ ∷ Eλ ⟩ ⟨ S' , E' ⟩)
           (env : Env-c Eλ)
           → Value-c (α₂ ⇒ α₁)
@@ -126,29 +116,19 @@ data Code where
   LOOKUP : var α E → Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
   APP : Code ⟨ VAL α₁ ∷ S , E ⟩ ⟨ S' , E' ⟩ →
         Code ⟨ VAL (α₂ ⇒ α₁) ∷ VAL α₂ ∷ S , E ⟩ ⟨ S' , E' ⟩
-  -- RET : {code : Code ⟨ VAL α₁ ∷ S , E ⟩ ⟨ S' , E' ⟩} {env : Env-c E}
-  --       → Code ⟨ VAL α₁ ∷ CLO code env ∷ S , Eλ ⟩ ⟨ VAL α₁ ∷ S , E ⟩
   RET : Code ⟨ VAL α₁ ∷ CLO (VAL α₁ ∷ S) S' E E' ∷ S , Eλ ⟩ ⟨ S' , E' ⟩
---   ABS : ({S S' : List STy} {E E' : List Ty} →
---         Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
---         Code (ENV (conv-ty-lst E) ∷ S) S' (α₂-c ∷ E-lam-c) (conv-ty-lst E')) →      --exec ABSの定義においてlamの型
---         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ S) S' E-lam-c E'-c →                 --exec ABSの定義においてcの型
---         Code S S' E-lam-c E'-c
---   HALT : Code S S E-c E-c
+  ABS : ({S-app S' : List STy} {E-app E' : List Ty}
+          → Code ⟨ (CLO (VAL α₁ ∷ S-app) S' E-app E' ∷ S-app) , α₂ ∷ Eλ ⟩ ⟨ S' , E' ⟩)
+        → Code ⟨ VAL (α₂ ⇒ α₁) ∷ S , Eλ ⟩ ⟨ S' , E' ⟩
+        → Code ⟨ S , Eλ ⟩ ⟨ S' , E' ⟩
+  HALT : Code ⟨ S , E ⟩ ⟨ S , E ⟩
 
 comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
 comp (Var v) c = LOOKUP v c
-comp (Abs x) c = {!!}
+comp (Abs e) c = ABS (comp e RET) c
 comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
-
--- comp (Abs e) c =
---   ABS
---     (λ {S : List STy} {S' : List STy} {E : List Ty} {E' : List Ty}
---          (c' : Code (VAL _ ∷ S) S' (conv-ty-lst E) (conv-ty-lst E'))
---       → (comp e (RET c')))
---     c
 
 conv-env : Env E → Env-c E
 
@@ -163,10 +143,6 @@ lookup-c : var α E → Env-c E → Value-c α
 lookup-c zero (cons-c fst rest) = fst
 lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
--- exec (ABS lam c) ⟨ s , env-lam ⟩ = exec c ⟨ ⟨ lam , env-lam ⟩ ▷ s , env-lam ⟩
--- exec (RET c') ⟨ x₁ ▷ env ▷ s , cons-c x₂ env-lam ⟩ = exec c' ⟨ x₁ ▷ s , env ⟩
--- exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
-
 {-# TERMINATING #-}
 exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' × Env-c E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
@@ -174,6 +150,8 @@ exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec 
 exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
 exec RET ⟨ EVal vλ ▷ EClo c env ▷ s , _ ⟩ = exec c ⟨ EVal vλ ▷ s , env ⟩
 exec (APP c) ⟨ EVal (Clo-c code envλ) ▷ EVal v₂ ▷ s , env ⟩ = exec code ⟨ EClo c env ▷ s , cons-c v₂ envλ ⟩
+exec (ABS code c) ⟨ s , env ⟩ = exec c ⟨ EVal (Clo-c code env) ▷ s , env ⟩
+exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
 
 lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
 lemma-order-exchange zero (cons x env) = refl
@@ -191,12 +169,8 @@ lemma-order-exchange (suc v) (cons x env) =
   ∎
 
 correct :
-  (e : Expr α E)
-  (c : Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩)
-  (s : Stack S)
-  (env : Env E)
-  {v : Value α}
-  → (eval e env v)
+  (e : Expr α E) (c : Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩) (s : Stack S) (env : Env E) {v : Value α}
+  → eval e env v
   → exec (comp e c) ⟨ s , conv-env env ⟩ ≡ exec c ⟨ EVal (conv v) ▷ s , conv-env env ⟩
 
 correct (Val n) c s env (eNum n) =
@@ -239,11 +213,11 @@ correct (Var v) c s env eVar =
 correct (Abs e) c s env eAbs =
   begin
     exec (comp (Abs e) c) ⟨ s , conv-env env ⟩
-  -- ≡⟨ {!!} ⟩
-  --   exec (ABS (comp e RET) c) ⟨ s , conv-env env ⟩
-  ≡⟨ {!!} ⟩
+  ≡⟨ refl ⟩
+    exec (ABS (comp e RET) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
     exec c ⟨ EVal (Clo-c (comp e RET) (conv-env env)) ▷ s , conv-env env ⟩
-  ≡⟨ {!!} ⟩
+  ≡⟨ refl ⟩
     exec c ⟨ EVal (conv (Clo e env)) ▷ s , conv-env env ⟩
   ∎
 
@@ -265,3 +239,54 @@ correct (App e₁ e₂) c s env (eApp eλ envλ vλ v₂ p₁ p₂ pλ) =
   ≡⟨ refl ⟩
     exec c ⟨ EVal (conv vλ) ▷ s , conv-env env ⟩
   ∎
+
+compile : Expr α E → Code ⟨ S , E ⟩ ⟨ (VAL α ∷ S) , E ⟩
+compile e = comp e HALT
+  
+correct' : (e : Expr α E) (s : Stack S) (env : Env E) (v : Value α)
+           → eval e env v
+           → exec (compile e) ⟨ s , conv-env env ⟩ ≡ ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+correct' e s env v p =
+  begin
+    exec (compile e) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (comp e HALT) ⟨ s , conv-env env ⟩
+  ≡⟨ correct e HALT s env p ⟩
+    exec HALT ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+  ∎
+
+-- 1 + 1
+Expr1 : Expr nat []
+Expr1 = Add (Val 1) (Val 2)
+-- (λx. x)
+Expr2 : Expr (α ⇒ α) []
+Expr2 = Abs (Var zero)
+-- (λx. x) 3
+Expr3 : Expr nat []
+Expr3 = App (Abs (Var zero)) (Val 3)
+-- x
+Expr4 : Expr α (σ ∷ α ∷ E)
+Expr4 = Var (suc zero)
+-- (λx. x + 2) 3
+Expr5 : Expr nat []
+Expr5 = App (Abs (Add (Var zero) (Val 2))) (Val 3)
+-- (λxy. y + x) 3 5
+Expr6 : Expr nat []
+Expr6 = App (App (Abs (Abs (Add (Var zero) (Var (suc zero))))) (Val 3)) (Val 5)
+-- (λxy. y + x 1) (λx. x + 1) 3
+Expr7 : Expr nat []
+Expr7 = App (App (Abs (Abs (Add (Var zero) (App (Var (suc zero)) (Val 1))))) (Abs (Add (Var zero) (Val 1)))) (Val 3)
+
+test3 : exec (compile Expr3) ⟨ ϵ , nil-c ⟩ ≡ ⟨ EVal (Num-c 3) ▷ ϵ , nil-c ⟩
+test3 = refl
+
+test5 : exec (compile Expr5) ⟨ ϵ , nil-c ⟩ ≡ ⟨ EVal (Num-c 5) ▷ ϵ , nil-c ⟩
+test5 = refl
+
+test6 : exec (compile Expr6) ⟨ ϵ , nil-c ⟩ ≡ ⟨ EVal (Num-c 8) ▷ ϵ , nil-c ⟩
+test6 = refl
+
+test7 : exec (compile Expr7) ⟨ ϵ , nil-c ⟩ ≡ ⟨ EVal (Num-c 5) ▷ ϵ , nil-c ⟩
+test7 = refl
