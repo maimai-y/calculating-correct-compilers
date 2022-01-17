@@ -77,16 +77,22 @@ data eval : (Expr α E) → Env E → Value α → Set where
          → eval eλ (cons v₂ envλ) vλ
          → eval (App e₁ e₂) env vλ
 
-data STy : Set where
-  VAL : Ty → STy
-  --CLO : List Ty-c → STy
+data STy : Set
 
 data Env-c : List Ty → Set
 data Value-c : Ty → Set
 data Code : (List STy × List Ty) → (List STy × List Ty) → Set
 
 variable
+  β : STy
   S S' : List STy
+  code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
+  env : Env-c E
+
+data STy where
+  VAL : Ty → STy
+  --CLO : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Env-c E → STy
+  CLO : STy
 
 data Env-c where
   nil-c : Env-c []
@@ -94,15 +100,15 @@ data Env-c where
 
 data Value-c where
   Num-c : (n : ℕ) → Value-c nat
-  Clo-c : (code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
+  Clo-c : (code : Code ⟨ CLO ∷ S , α₂ ∷ Eλ ⟩ ⟨ VAL α₁ ∷ S , α₂ ∷ Eλ ⟩) (env : Env-c Eλ) → Value-c (α₂ ⇒ α₁)
 
 data Elem : STy → Set where
   EVal : (v : Value-c α) → Elem (VAL α)
-  -- EClo : (clo : Value (α₂ ⇒ α₁)) → Elem (α₂ ⇒ α₁)  --(e : Expr α₁ E) (env : Env E) → Elem (α₂ ⇒ α₁)
+  EClo : (code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩) → (env : Env-c E) → Elem CLO
 
 data Stack : List STy → Set where
   ϵ : Stack []
-  _▷_ : Elem (VAL α) → Stack S → Stack (VAL α ∷ S)
+  _▷_ : Elem β → Stack S → Stack (β ∷ S)
 infixr 40 _▷_
 
 data Code where
@@ -111,12 +117,14 @@ data Code where
   LOOKUP : var α E → Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
   APP : Code ⟨ VAL α₁ ∷ S , E ⟩ ⟨ S' , E' ⟩ →
         Code ⟨ VAL (α₂ ⇒ α₁) ∷ VAL α₂ ∷ S , E ⟩ ⟨ S' , E' ⟩
+  -- RET : {code : Code ⟨ VAL α₁ ∷ S , E ⟩ ⟨ S' , E' ⟩} {env : Env-c E}
+  --       → Code ⟨ VAL α₁ ∷ CLO code env ∷ S , Eλ ⟩ ⟨ VAL α₁ ∷ S , E ⟩
+  RET : Code ⟨ VAL α₁ ∷ CLO ∷ S , Eλ ⟩ ⟨ VAL α₁ ∷ S , E ⟩
 --   ABS : ({S S' : List STy} {E E' : List Ty} →
 --         Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
 --         Code (ENV (conv-ty-lst E) ∷ S) S' (α₂-c ∷ E-lam-c) (conv-ty-lst E')) →      --exec ABSの定義においてlamの型
 --         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ S) S' E-lam-c E'-c →                 --exec ABSの定義においてcの型
 --         Code S S' E-lam-c E'-c
---   RET : Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (VAL α₁-c ∷ ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c
 --   HALT : Code S S E-c E-c
 
 comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
@@ -135,9 +143,12 @@ comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 conv-env : Env E → Env-c E
 
-conv : Value α → Value-c α
+conv-clo : (exp : Expr α₁ (α₂ ∷ Eλ)) (env : Env Eλ) → Value-c (α₂ ⇒ α₁)
+conv-clo = {!!}
+
+conv : Value α → Value-c α   --{S : List STy} →
 conv (Num n) = Num-c n
-conv (Clo exp env) = {!Clo-c !}
+conv (Clo exp env) = conv-clo exp env  --Clo-c (comp exp RET) (conv-env env) 
 
 conv-env nil = nil-c
 conv-env (cons v env) = cons-c (conv v) (conv-env env)
@@ -156,6 +167,8 @@ exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
 exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
 exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
 exec (APP c) ⟨ s , env ⟩ = {!!}
+exec {S = VAL α₁ ∷ CLO ∷ S} RET ⟨ EVal vλ ▷ EClo c env ▷ s , _ ⟩ = {!!}
+--{!exec {S = VAL α₁ ∷ S} c ⟨ EVal vλ ▷ s , env ⟩!}
 
 lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
 lemma-order-exchange zero (cons x env) = refl
@@ -224,12 +237,14 @@ correct (Abs _) c s env eAbs = {!!}
 correct (App e₁ e₂) c s env (eApp eλ envλ vλ v₂ p₁ p₂ pλ) =
   begin
     exec (comp (App e₁ e₂) c) ⟨ s , conv-env env ⟩
-  ≡⟨ refl ⟩
-    exec (comp e₂ (comp e₁ (APP c))) ⟨ s , conv-env env ⟩
-  ≡⟨ correct e₂ (comp e₁ (APP c)) s env p₂ ⟩
-    exec (comp e₁ (APP c)) ⟨ EVal (conv v₂) ▷ s , conv-env env ⟩
-  ≡⟨ correct e₁ (APP c) (EVal (conv v₂) ▷ s) env p₁ ⟩
-    exec (APP c) ⟨ EVal (conv (Clo eλ envλ)) ▷ EVal (conv v₂) ▷ s , conv-env env ⟩
+  -- ≡⟨ refl ⟩
+  --   exec (comp e₂ (comp e₁ (APP c))) ⟨ s , conv-env env ⟩
+  -- ≡⟨ correct e₂ (comp e₁ (APP c)) s env p₂ ⟩
+  --   exec (comp e₁ (APP c)) ⟨ EVal (conv v₂) ▷ s , conv-env env ⟩
+  -- ≡⟨ correct e₁ (APP c) (EVal (conv v₂) ▷ s) env p₁ ⟩
+  --   exec (APP c) ⟨ EVal (conv (Clo eλ envλ)) ▷ EVal (conv v₂) ▷ s , conv-env env ⟩
+  -- ≡⟨ {!!} ⟩
+  --   exec RET ⟨ EVal (conv vλ) ▷ EClo c (conv-env env) ▷ s , conv-env envλ ⟩
   ≡⟨ {!!} ⟩
     exec c ⟨ EVal (conv vλ) ▷ s , conv-env env ⟩
   ∎
