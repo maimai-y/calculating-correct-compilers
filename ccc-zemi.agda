@@ -59,10 +59,11 @@ lookup (suc v) (cons x env) = lookup v env
 data eval : (Expr α E) → Env E → Value α → Set where
   eNum : {env : Env E}
          (n : ℕ) → eval (Val n) env (Num n)
-  eAdd : {env : Env E} {n m : ℕ} {x y : Expr nat E}
-         → eval x env (Num n)
-         → eval y env (Num m)
-         → eval (Add x y) env (Num (n + m))
+  eAdd : {env : Env E} {e₁ e₂ : Expr nat E}
+         (n₁ n₂ : ℕ)
+         → eval e₁ env (Num n₁)
+         → eval e₂ env (Num n₂)
+         → eval (Add e₁ e₂) env (Num (n₁ + n₂))
   eVar : {env : Env E} {v : var α E}
          → eval (Var v) env (lookup v env)
   eAbs : {envλ : Env Eλ} {eλ : Expr α₁ (α₂ ∷ Eλ)}
@@ -95,12 +96,6 @@ data Value-c where
   Num-c : (n : ℕ) → Value-c nat
   Clo-c : (code : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩) (env : Env-c E) → Value-c (α₂ ⇒ α₁)
 
-comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
-
--- data Env-c : List Ty-c → Set where
---   nil-c : Env-c []
---   cons-c : El-Ty-c α-c → Env-c E-c → Env-c (α-c ∷ E-c)
-
 data Elem : STy → Set where
   EVal : (v : Value-c α) → Elem (VAL α)
   -- EClo : (clo : Value (α₂ ⇒ α₁)) → Elem (α₂ ⇒ α₁)  --(e : Expr α₁ E) (env : Env E) → Elem (α₂ ⇒ α₁)
@@ -112,7 +107,7 @@ infixr 40 _▷_
 
 data Code where
   PUSH : (n : ℕ) → (c : Code ⟨ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩) → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
---   ADD : Code (VAL nat-c ∷ S) S' E-c E'-c → Code (VAL nat-c ∷ VAL nat-c ∷ S) S' E-c E'-c
+  ADD : Code ⟨ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ VAL nat ∷ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩
 --   LOOKUP : var α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) E'-c → Code S S' (conv-ty-lst E) E'-c
 --   ABS : ({S S' : List STy} {E E' : List Ty} →
 --         Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
@@ -123,14 +118,13 @@ data Code where
 --   APP : Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
 --         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ VAL α₂-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E')
 --   HALT : Code S S E-c E-c
-{-
-comp : Expr α E → Code (α ∷ S) S' → Code S S'
+comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
 comp (Val n) c = PUSH n c
-comp (Add x x₁) c = {!!}
+comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
 comp (Var v) c = {!!}
 comp (Abs x) c = {!!}
 comp (App x x₁) c = {!!}
--}
+
 -- comp : Expr α E → Code (VAL (conv-ty α) ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') → Code S S' (conv-ty-lst E) (conv-ty-lst E')
 -- comp (Val n) c = PUSH n c
 -- comp (Add e₁ e₂) c = (comp e₁ (comp e₂ (ADD c)))
@@ -168,6 +162,7 @@ conv-env (cons v env) = cons-c (conv v) (conv-env env)
 
 exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' × Env-c E'
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
+exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
 
 correct :
   (e : Expr α E)
@@ -182,23 +177,31 @@ correct :
 correct (Val n) c s env (eNum n) =
   begin
     exec (comp (Val n) c) ⟨ s , conv-env env ⟩
-  ≡⟨ {!!} ⟩
+  ≡⟨ refl ⟩
     exec (PUSH n c) ⟨ s , conv-env env ⟩
   ≡⟨ refl ⟩
-    exec c ⟨ (EVal (Num-c n) ▷ s) , conv-env env ⟩
+    exec c ⟨ EVal (Num-c n) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ EVal (conv (Num n)) ▷ s , conv-env env ⟩
   ∎
--- correct (Add e e₁) c s env = {!!}
--- correct (Var v) c s env = {!!}
--- correct (Abs e) c s env =
---   begin
---     exec (comp (Abs e) c) s
---   ≡⟨ {!!} ⟩
---     exec c (Clo (λ x → eval e (cons x env)) ▷ s)
---   ∎
--- correct (App e₁ e₂) c s env =
---   begin
---     exec (comp (App e₁ e₂) c) s
---   ≡⟨ {!!} ⟩
---     exec c (conv (eval e₁ env (eval e₂ env)) ▷ s)
---   ∎
+
+correct (Add e₁ e₂) c s env (eAdd n₁ n₂ p₁ p₂) =
+  begin
+    exec (comp (Add e₁ e₂) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (comp e₁ (comp e₂ (ADD c))) ⟨ s , conv-env env ⟩
+  ≡⟨ correct e₁ (comp e₂ (ADD c)) s env p₁ ⟩
+    exec (comp e₂ (ADD c)) ⟨ EVal (Num-c n₁) ▷ s , conv-env env ⟩
+  ≡⟨ correct e₂ (ADD c) (EVal (Num-c n₁) ▷ s) env p₂ ⟩
+    exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec c ⟨ EVal (conv (Num (n₁ + n₂))) ▷ s , conv-env env ⟩
+  ∎
+
+correct (Var v) c s env eVar = {!!}
+correct (Abs _) c s env eAbs = {!!}
+correct (App _ _) c s env (eApp x x₁ x₂) = {!!}
+
 
