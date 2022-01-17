@@ -69,13 +69,13 @@ data eval : (Expr α E) → Env E → Value α → Set where
   eAbs : {envλ : Env Eλ} {eλ : Expr α₁ (α₂ ∷ Eλ)}
          → eval (Abs eλ) envλ (Clo eλ envλ)
   eApp : {env : Env E}
-         {eλ : Expr α₁ (α₂ ∷ Eλ)} {envλ : Env Eλ}
-         {e₁ : Expr (α₂ ⇒ α₁) E} {v₁ : Value α₁}
-         {e₂ : Expr α₂ E} {v₂ : Value α₂}
+         (eλ : Expr α₁ (α₂ ∷ Eλ)) (envλ : Env Eλ)
+         {e₁ : Expr (α₂ ⇒ α₁) E} (vλ : Value α₁)
+         {e₂ : Expr α₂ E} (v₂ : Value α₂)
          → eval e₁ env (Clo eλ envλ)
          → eval e₂ env v₂
-         → eval eλ (cons v₂ envλ) v₁
-         → eval (App e₁ e₂) env v₁
+         → eval eλ (cons v₂ envλ) vλ
+         → eval (App e₁ e₂) env vλ
 
 data STy : Set where
   VAL : Ty → STy
@@ -109,21 +109,22 @@ data Code where
   PUSH : (n : ℕ) → (c : Code ⟨ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩) → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
   ADD : Code ⟨ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ VAL nat ∷ VAL nat ∷ S , E ⟩ ⟨ S' , E' ⟩
   LOOKUP : var α E → Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
+  APP : Code ⟨ VAL α₁ ∷ S , E ⟩ ⟨ S' , E' ⟩ →
+        Code ⟨ VAL (α₂ ⇒ α₁) ∷ VAL α₂ ∷ S , E ⟩ ⟨ S' , E' ⟩
 --   ABS : ({S S' : List STy} {E E' : List Ty} →
 --         Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
 --         Code (ENV (conv-ty-lst E) ∷ S) S' (α₂-c ∷ E-lam-c) (conv-ty-lst E')) →      --exec ABSの定義においてlamの型
 --         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ S) S' E-lam-c E'-c →                 --exec ABSの定義においてcの型
 --         Code S S' E-lam-c E'-c
 --   RET : Code (VAL α₁-c ∷ S) S' E-c E'-c → Code (VAL α₁-c ∷ ENV E-c ∷ S) S' (α₂-c ∷ E-lam-c) E'-c
---   APP : Code (VAL α₁-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E') →
---         Code (VAL (α₂-c ⇒-c α₁-c , E-lam-c) ∷ VAL α₂-c ∷ S) S' (conv-ty-lst E) (conv-ty-lst E')
 --   HALT : Code S S E-c E-c
+
 comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
 comp (Val n) c = PUSH n c
 comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
 comp (Var v) c = LOOKUP v c
 comp (Abs x) c = {!!}
-comp (App x x₁) c = {!!}
+comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 -- comp (Abs e) c =
 --   ABS
@@ -131,7 +132,6 @@ comp (App x x₁) c = {!!}
 --          (c' : Code (VAL _ ∷ S) S' (conv-ty-lst E) (conv-ty-lst E'))
 --       → (comp e (RET c')))
 --     c
--- comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 conv-env : Env E → Env-c E
 
@@ -155,6 +155,7 @@ exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' ×
 exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
 exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
 exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
+exec (APP c) ⟨ s , env ⟩ = {!!}
 
 lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
 lemma-order-exchange zero (cons x env) = refl
@@ -219,6 +220,16 @@ correct (Var v) c s env eVar =
   ∎
 
 correct (Abs _) c s env eAbs = {!!}
-correct (App _ _) c s env (eApp x x₁ x₂) = {!!}
 
-
+correct (App e₁ e₂) c s env (eApp eλ envλ vλ v₂ p₁ p₂ pλ) =
+  begin
+    exec (comp (App e₁ e₂) c) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (comp e₂ (comp e₁ (APP c))) ⟨ s , conv-env env ⟩
+  ≡⟨ correct e₂ (comp e₁ (APP c)) s env p₂ ⟩
+    exec (comp e₁ (APP c)) ⟨ EVal (conv v₂) ▷ s , conv-env env ⟩
+  ≡⟨ correct e₁ (APP c) (EVal (conv v₂) ▷ s) env p₁ ⟩
+    exec (APP c) ⟨ EVal (conv (Clo eλ envλ)) ▷ EVal (conv v₂) ▷ s , conv-env env ⟩
+  ≡⟨ {!!} ⟩
+    exec c ⟨ EVal (conv vλ) ▷ s , conv-env env ⟩
+  ∎
