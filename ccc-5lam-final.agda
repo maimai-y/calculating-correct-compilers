@@ -1,5 +1,5 @@
 
-module ccc-zemi where
+module ccc-5lam-final where
 
 open import Data.Nat
 open import Data.List using (List; []; _∷_)
