@@ -60,7 +60,7 @@ lookup (suc v) (cons x env) = lookup v env
 data C : Ty → Ty → Set where
   nilC : C α α
   addLC : (env : Env E) → (e₂ : Expr nat E) → (c : C nat β) → C nat β
-  addRC : (v₂ : Value nat) → (c : C nat β) → C nat β
+  addRC : (v₁ : Value nat) → (c : C nat β) → C nat β
   appLC : (env : Env E) → (e₂ : Expr α₂ E) → (c : C α₁ β) → C (α₂ ⇒ α₁) β
   appRC : (v₁ : Value (α₂ ⇒ α₁)) → (c : C α₁ β) → C α₂ β 
 
@@ -74,7 +74,7 @@ data appC : Value α → C α β → Value β → Set where
            → eval e₂ env (addRC v₁ c) v
            ---------------------------- (CPlusL)
            → appC v₁ (addLC env e₂ c) v
-  CPlusR : (n₁ n₂ : ℕ) {c : C nat β} {v : Value β}
+  CPlusR : {n₁ n₂ : ℕ} {c : C nat β} {v : Value β}
            → appC (Num (n₁ + n₂)) c v
            ---------------------------- (CPlusR)
            → appC (Num n₂) (addRC (Num n₁) c) v
@@ -91,11 +91,11 @@ data appC : Value α → C α β → Value β → Set where
           → appC v₂ (appRC (Clo eλ envλ) c) v
 
 data eval where
-  ENum : {env : Env E} {v : Value β} {c : C nat β} (n : ℕ)
+  ENum : {env : Env E} {v : Value β} {c : C nat β} {n : ℕ}
          → appC (Num n) c v
          ------------------------ (ENum)
          → eval (Val n) env c v
-  EPlus : {env : Env E} {e₁ e₂ : Expr nat E} {v₁ : Value nat} {v : Value β} {c : C nat β}
+  EPlus : {env : Env E} {e₁ e₂ : Expr nat E} {v : Value β} {c : C nat β}
          → eval e₁ env (addLC env e₂ c) v
          -------------------------------- (EPlus)
          → eval (Add e₁ e₂) env c v
@@ -111,6 +111,9 @@ data eval where
          → eval e₁ env (appLC env e₂ c) v
          ------------------------------ (EApp)
          → eval (App e₁ e₂) env c v
+
+eval1 : eval (Add (Val 1) (Val 2)) nil nilC (Num 3)
+eval1 = EPlus (ENum (CPlusL (ENum (CPlusR CEmpty))))
 
 data STy : Set
 
@@ -204,12 +207,23 @@ lemma-order-exchange (suc v) (cons x env) =
     conv (lookup (suc v) (cons x env))
   ∎
 
-conv-cont : (cont : C α β) → Code ⟨ VAL α ∷ S , E ⟩ ⟨ VAL β ∷ S , E ⟩
+conv-cont : (cont : C α β) → Code ⟨ VAL α ∷ S , E ⟩ ⟨ VAL β ∷ S , E ⟩ --???
+conv-cont nilC = HALT
+conv-cont (addLC env e₂ c) = {!!}
+conv-cont (addRC (Num n₁) c) = PUSH n₁ (ADD (conv-cont c))
+conv-cont (appLC env e₂ c) = {!!}
+conv-cont (appRC (Clo exp env) c) = {!!}
 
 correct :
   (e : Expr α E) (c : C α β) (s : Stack S) (env : Env E) {v : Value β}
   → eval e env c v
   → exec (comp e (conv-cont c)) ⟨ s , conv-env env ⟩ ≡ ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+
+correct .(Val _) c s env (ENum x) = {!!}
+correct .(Add _ _) c s env (EPlus x) = {!!}
+correct .(Var _) c s env (EVar x) = {!!}
+correct .(Abs _) c s env (EAbs x) = {!!}
+correct .(App _ _) c s env (EApp x) = {!!}
 
 {-
 correct (Val n) c s env (eNum n) =
