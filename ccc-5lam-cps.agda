@@ -91,7 +91,7 @@ data appC : Value α → C α β → Value β → Set where
           → appC v₂ (appRC (Clo eλ envλ) c) v
 
 data eval where
-  ENum : {env : Env E} {v : Value β} {c : C nat β} {n : ℕ}
+  ENum : {env : Env E} (v : Value β) {c : C nat β} {n : ℕ}
          → appC (Num n) c v
          ------------------------ (ENum)
          → eval (Val n) env c v
@@ -113,7 +113,7 @@ data eval where
          → eval (App e₁ e₂) env c v
 
 eval1 : eval (Add (Val 1) (Val 2)) nil nilC (Num 3)
-eval1 = EPlus (ENum (CPlusL (ENum (CPlusR CEmpty))))
+eval1 = EPlus (ENum (Num 3) (CPlusL (ENum (Num 3) (CPlusR CEmpty))))
 
 data STy : Set
 
@@ -163,7 +163,7 @@ data Code where
 
 comp : Expr α E → Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
 -- comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
--- comp (Val n) c = PUSH n c
+comp (Val n) c = PUSH n c
 -- comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
 -- comp (Var v) c = LOOKUP v c
 -- comp (Abs e) c = ABS (comp e RET) c
@@ -184,7 +184,7 @@ lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
 {-# TERMINATING #-}
 exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' × Env-c E'
--- exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
+exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
 -- exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
 -- exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
 -- exec RET ⟨ EVal vλ ▷ EClo c env ▷ s , _ ⟩ = exec c ⟨ EVal vλ ▷ s , env ⟩
@@ -219,7 +219,16 @@ correct :
   → eval e env c v
   → exec (comp e (conv-cont c)) ⟨ s , conv-env env ⟩ ≡ ⟨ EVal (conv v) ▷ s , conv-env env ⟩
 
-correct .(Val _) c s env (ENum x) = {!!}
+correct (Val n) c s env (ENum v p) =
+  begin
+    exec (comp (Val n) (conv-cont c)) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (PUSH n (conv-cont c)) ⟨ s , conv-env env ⟩
+  ≡⟨ refl ⟩
+    exec (conv-cont c) ⟨ EVal (Num-c n) ▷ s , conv-env env ⟩
+  ≡⟨ {!!} ⟩
+    ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+  ∎
 correct .(Add _ _) c s env (EPlus x) = {!!}
 correct .(Var _) c s env (EVar x) = {!!}
 correct .(Abs _) c s env (EAbs x) = {!!}
