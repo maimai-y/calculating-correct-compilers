@@ -56,10 +56,13 @@ lookup (suc v) (cons x env) = lookup v env
 -- eval (Abs e) env c = c (Clo e env)
 -- eval (App e₁ e₂) env c = eval e₁ env (λ { (Clo eλ envλ) → eval e₂ env (λ { v₂ → eval eλ (cons v₂ envλ) c }) })
 
+-- relational semantics
 data C : Ty → Ty → Set where
   nilC : C α α
   addLC : (env : Env E) → (e₂ : Expr nat E) → (c : C nat β) → C nat β
   addRC : (v₂ : Value nat) → (c : C nat β) → C nat β
+  appLC : (env : Env E) → (e₂ : Expr α₂ E) → (c : C α₁ β) → C (α₂ ⇒ α₁) β
+  appRC : (v₁ : Value (α₂ ⇒ α₁)) → (c : C α₁ β) → C α₂ β 
 
 data eval : (Expr α E) → Env E → C α β → Value β → Set
 
@@ -67,14 +70,26 @@ data appC : Value α → C α β → Value β → Set where
   CEmpty : {v : Value α}
            --------------- (CEmpty)
            → appC v nilC v
-  CPlusL : {v₁ : Value nat} {v : Value β} (e₂ : Expr nat E) (env : Env E) (c : C nat β)
+  CPlusL : {v₁ : Value nat} {v : Value β} {e₂ : Expr nat E} {env : Env E} {c : C nat β}
            → eval e₂ env (addRC v₁ c) v
            ---------------------------- (CPlusL)
            → appC v₁ (addLC env e₂ c) v
-  -- CPlusR : → appC (Num (n₁ + n₂)) c v
-  --          → appC v₂ (addLC env e₂ c) v
+  CPlusR : (n₁ n₂ : ℕ) {c : C nat β} {v : Value β}
+           → appC (Num (n₁ + n₂)) c v
+           ---------------------------- (CPlusR)
+           → appC (Num n₂) (addRC (Num n₁) c) v
+  CAppL : {e₂ : Expr α₂ E} {env : Env E} {v₁ : Value (α₂ ⇒ α₁)} {c : C α₁ β} {v : Value β}
+          → eval e₂ env (appRC v₁ c) v
+          ---------------------------- (CPlusL)
+          → appC v₁ (appLC env e₂ c) v
+  CAppR : {env : Env E}
+          (eλ : Expr α₁ (α₂ ∷ Eλ)) (envλ : Env Eλ)
+          {v₂ : Value α₂}
+          {c : C α₁ β} {v : Value β}
+          → eval eλ (cons v₂ envλ) c v
+          ---------------------------- (CPlusL)
+          → appC v₂ (appRC (Clo eλ envλ) c) v
 
--- relational semantics
 data eval where
   ENum : {env : Env E} {v : Value β} {c : C nat β} (n : ℕ)
          → appC (Num n) c v
@@ -92,14 +107,10 @@ data eval where
          → appC (Clo eλ envλ) c v
          -------------------------- (EAbs)
          → eval (Abs eλ) envλ c v
-  -- eApp : {env : Env E}
-  --        (eλ : Expr α₁ (α₂ ∷ Eλ)) (envλ : Env Eλ)
-  --        {e₁ : Expr (α₂ ⇒ α₁) E} (vλ : Value α₁)
-  --        {e₂ : Expr α₂ E} (v₂ : Value α₂)
-  --        → eval e₁ env (Clo eλ envλ)
-  --        → eval e₂ env v₂
-  --        → eval eλ (cons v₂ envλ) vλ
-  --        → eval (App e₁ e₂) env vλ
+  EApp : {env : Env E} {c : C α₁ β} {v : Value β} {e₁ : Expr (α₂ ⇒ α₁) E} {e₂ : Expr α₂ E}
+         → eval e₁ env (appLC env e₂ c) v
+         ------------------------------ (EApp)
+         → eval (App e₁ e₂) env c v
 
 {-
 data STy : Set
