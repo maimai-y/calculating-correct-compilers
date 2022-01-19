@@ -112,7 +112,6 @@ data eval where
          ------------------------------ (EApp)
          → eval (App e₁ e₂) env c v
 
-{-
 data STy : Set
 
 data Env-c : List Ty → Set
@@ -120,7 +119,7 @@ data Value-c : Ty → Set
 data Code : (List STy × List Ty) → (List STy × List Ty) → Set
 
 variable
-  β : STy
+  γ : STy
   S S' : List STy
 
 data STy where
@@ -143,7 +142,7 @@ data Elem : STy → Set where
 
 data Stack : List STy → Set where
   ϵ : Stack []
-  _▷_ : Elem β → Stack S → Stack (β ∷ S)
+  _▷_ : Elem γ → Stack S → Stack (γ ∷ S)
 infixr 40 _▷_
 
 data Code where
@@ -159,12 +158,13 @@ data Code where
         → Code ⟨ S , Eλ ⟩ ⟨ S' , E' ⟩
   HALT : Code ⟨ S , E ⟩ ⟨ S , E ⟩
 
-comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
-comp (Val n) c = PUSH n c
-comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
-comp (Var v) c = LOOKUP v c
-comp (Abs e) c = ABS (comp e RET) c
-comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
+comp : Expr α E → Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
+-- comp : Expr α E → Code ⟨ (VAL α ∷ S) , E ⟩ ⟨ S' , E' ⟩ → Code ⟨ S , E ⟩ ⟨ S' , E' ⟩
+-- comp (Val n) c = PUSH n c
+-- comp (Add e₁ e₂) c = comp e₁ (comp e₂ (ADD c))
+-- comp (Var v) c = LOOKUP v c
+-- comp (Abs e) c = ABS (comp e RET) c
+-- comp (App e₁ e₂) c = comp e₂ (comp e₁ (APP c))
 
 conv-env : Env E → Env-c E
 
@@ -181,13 +181,13 @@ lookup-c (suc v) (cons-c fst rest) = lookup-c v rest
 
 {-# TERMINATING #-}
 exec : Code ⟨ S , E ⟩ ⟨ S' , E' ⟩ → Stack S × Env-c E → Stack S' × Env-c E'
-exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
-exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
-exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
-exec RET ⟨ EVal vλ ▷ EClo c env ▷ s , _ ⟩ = exec c ⟨ EVal vλ ▷ s , env ⟩
-exec (APP c) ⟨ EVal (Clo-c code envλ) ▷ EVal v₂ ▷ s , env ⟩ = exec code ⟨ EClo c env ▷ s , cons-c v₂ envλ ⟩
-exec (ABS code c) ⟨ s , env ⟩ = exec c ⟨ EVal (Clo-c code env) ▷ s , env ⟩
-exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
+-- exec (PUSH n c) ⟨ s , env ⟩ = exec c ⟨ (EVal (Num-c n) ▷ s) , env ⟩
+-- exec (ADD c) ⟨ EVal (Num-c n₂) ▷ EVal (Num-c n₁) ▷ s , env ⟩ = exec c ⟨ EVal (Num-c (n₁ + n₂)) ▷ s , env ⟩
+-- exec (LOOKUP v c) ⟨ s , env ⟩ = exec c ⟨ EVal (lookup-c v env) ▷ s , env ⟩
+-- exec RET ⟨ EVal vλ ▷ EClo c env ▷ s , _ ⟩ = exec c ⟨ EVal vλ ▷ s , env ⟩
+-- exec (APP c) ⟨ EVal (Clo-c code envλ) ▷ EVal v₂ ▷ s , env ⟩ = exec code ⟨ EClo c env ▷ s , cons-c v₂ envλ ⟩
+-- exec (ABS code c) ⟨ s , env ⟩ = exec c ⟨ EVal (Clo-c code env) ▷ s , env ⟩
+-- exec HALT ⟨ s , env ⟩ = ⟨ s , env ⟩
 
 lemma-order-exchange : (v : var α E) (env : Env E) → lookup-c v (conv-env env) ≡ conv (lookup v env)
 lemma-order-exchange zero (cons x env) = refl
@@ -204,11 +204,14 @@ lemma-order-exchange (suc v) (cons x env) =
     conv (lookup (suc v) (cons x env))
   ∎
 
-correct :
-  (e : Expr α E) (c : Code ⟨ VAL α ∷ S , E ⟩ ⟨ S' , E' ⟩) (s : Stack S) (env : Env E) {v : Value α}
-  → eval e env v
-  → exec (comp e c) ⟨ s , conv-env env ⟩ ≡ exec c ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+conv-cont : (cont : C α β) → Code ⟨ VAL α ∷ S , E ⟩ ⟨ VAL β ∷ S , E ⟩
 
+correct :
+  (e : Expr α E) (c : C α β) (s : Stack S) (env : Env E) {v : Value β}
+  → eval e env c v
+  → exec (comp e (conv-cont c)) ⟨ s , conv-env env ⟩ ≡ ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+
+{-
 correct (Val n) c s env (eNum n) =
   begin
     exec (comp (Val n) c) ⟨ s , conv-env env ⟩
