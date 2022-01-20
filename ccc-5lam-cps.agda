@@ -59,8 +59,8 @@ lookup (suc v) (cons x env) = lookup v env
 -- relational semantics
 data C : Ty → Ty → Set where
   nilC : C α α
-  addLC : (env : Env E) → (e₂ : Expr nat E) → (c : C nat β) → C nat β
-  addRC : (v₁ : Value nat) → (c : C nat β) → C nat β
+  addLC : (e₂ : Expr nat E) → (c : C nat β) → C nat β
+  addRC : (c : C nat β) → C nat β
   appLC : (env : Env E) → (e₂ : Expr α₂ E) → (c : C α₁ β) → C (α₂ ⇒ α₁) β
   appRC : (v₁ : Value (α₂ ⇒ α₁)) → (c : C α₁ β) → C α₂ β 
 
@@ -71,13 +71,13 @@ data appC : Value α → C α β → Value β → Set where
            --------------- (CEmpty)
            → appC v nilC v
   CPlusL : {v₁ : Value nat} {v : Value β} {e₂ : Expr nat E} {env : Env E} {c : C nat β}
-           → eval e₂ env (addRC v₁ c) v
+           → eval e₂ env (addRC c) v
            ---------------------------- (CPlusL)
-           → appC v₁ (addLC env e₂ c) v
+           → appC v₁ (addLC e₂ c) v
   CPlusR : {n₁ n₂ : ℕ} {c : C nat β} {v : Value β}
            → appC (Num (n₁ + n₂)) c v
            ---------------------------- (CPlusR)
-           → appC (Num n₂) (addRC (Num n₁) c) v
+           → appC (Num n₂) (addRC c) v
   CAppL : {e₂ : Expr α₂ E} {env : Env E} {v₁ : Value (α₂ ⇒ α₁)} {c : C α₁ β} {v : Value β}
           → eval e₂ env (appRC v₁ c) v
           ---------------------------- (CAppL)
@@ -96,7 +96,7 @@ data eval where
          ------------------------ (ENum)
          → eval (Val n) env c v
   EPlus : {env : Env E} {e₁ e₂ : Expr nat E} {v : Value β} {c : C nat β}
-         → eval e₁ env (addLC env e₂ c) v
+         → eval e₁ env (addLC e₂ c) v
          -------------------------------- (EPlus)
          → eval (Add e₁ e₂) env c v
   EVar : {env : Env E} {v : var α E} {c : C α β} {val : Value β}
@@ -113,7 +113,7 @@ data eval where
          → eval (App e₁ e₂) env c v
 
 eval1 : eval (Add (Val 1) (Val 2)) nil nilC (Num 3)
-eval1 = EPlus (ENum (Num 3) (CPlusL (ENum (Num 3) (CPlusR CEmpty))))
+eval1 = EPlus (ENum (Num 3) (CPlusL {env = nil} (ENum (Num 3) (CPlusR {n₁ = 1} CEmpty))))
 
 data STy : Set
 
@@ -209,8 +209,8 @@ lemma-order-exchange (suc v) (cons x env) =
 
 conv-cont : (cont : C α β) → Code ⟨ VAL α ∷ S , E ⟩ ⟨ VAL β ∷ S , E ⟩ --???
 conv-cont nilC = HALT
-conv-cont (addLC env e₂ c) = {!comp e₂ (conv-cont c)!}
-conv-cont (addRC (Num n₁) c) = PUSH n₁ (ADD (conv-cont c))
+conv-cont (addLC e₂ c) = {!comp e₂ (conv-cont (addRC c))!}
+conv-cont (addRC c) = {!ADD (conv-cont c)!}
 conv-cont (appLC env e₂ c) = {!!}
 conv-cont (appRC (Clo exp env) c) = {!!}
 
