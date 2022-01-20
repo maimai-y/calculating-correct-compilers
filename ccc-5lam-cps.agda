@@ -80,14 +80,14 @@ data appC : Value α → C α β → Value β → Set where
            → appC (Num n₂) (addRC (Num n₁) c) v
   CAppL : {e₂ : Expr α₂ E} {env : Env E} {v₁ : Value (α₂ ⇒ α₁)} {c : C α₁ β} {v : Value β}
           → eval e₂ env (appRC v₁ c) v
-          ---------------------------- (CPlusL)
+          ---------------------------- (CAppL)
           → appC v₁ (appLC env e₂ c) v
   CAppR : {env : Env E}
           (eλ : Expr α₁ (α₂ ∷ Eλ)) (envλ : Env Eλ)
           {v₂ : Value α₂}
           {c : C α₁ β} {v : Value β}
           → eval eλ (cons v₂ envλ) c v
-          ---------------------------- (CPlusL)
+          ---------------------------- (CAppR)
           → appC v₂ (appRC (Clo eλ envλ) c) v
 
 data eval where
@@ -209,11 +209,15 @@ lemma-order-exchange (suc v) (cons x env) =
 
 conv-cont : (cont : C α β) → Code ⟨ VAL α ∷ S , E ⟩ ⟨ VAL β ∷ S , E ⟩ --???
 conv-cont nilC = HALT
-conv-cont (addLC env e₂ c) = {!!}
+conv-cont (addLC env e₂ c) = {!comp e₂ (conv-cont c)!}
 conv-cont (addRC (Num n₁) c) = PUSH n₁ (ADD (conv-cont c))
 conv-cont (appLC env e₂ c) = {!!}
 conv-cont (appRC (Clo exp env) c) = {!!}
 
+correct-app : (w : Value α) (c : C α β) (s : Stack S) (env : Env E) {v : Value β}
+  → appC w c v
+  → exec (conv-cont c) ⟨ EVal (conv w) ▷ s , conv-env env ⟩ ≡ ⟨ EVal (conv v) ▷ s , conv-env env ⟩
+  
 correct :
   (e : Expr α E) (c : C α β) (s : Stack S) (env : Env E) {v : Value β}
   → eval e env c v
@@ -226,10 +230,13 @@ correct (Val n) c s env (ENum v p) =
     exec (PUSH n (conv-cont c)) ⟨ s , conv-env env ⟩
   ≡⟨ refl ⟩
     exec (conv-cont c) ⟨ EVal (Num-c n) ▷ s , conv-env env ⟩
-  ≡⟨ {!!} ⟩
+  ≡⟨ refl ⟩
+    exec (conv-cont c) ⟨ EVal (conv (Num n)) ▷ s , conv-env env ⟩
+  ≡⟨ correct-app (Num n) c s env p ⟩
     ⟨ EVal (conv v) ▷ s , conv-env env ⟩
   ∎
-correct .(Add _ _) c s env (EPlus x) = {!!}
+
+correct (Add e₁ e₂) c s env (EPlus x) = {!!}
 correct .(Var _) c s env (EVar x) = {!!}
 correct .(Abs _) c s env (EAbs x) = {!!}
 correct .(App _ _) c s env (EApp x) = {!!}
